@@ -16,6 +16,7 @@ def main():
     ref_name = os.environ.get("REF_NAME", "")
     pr_title = os.environ.get("PR_TITLE", "")
     pr_merged = os.environ.get("PR_MERGED", "false").lower() == "true"
+    commit_messages = os.environ.get("COMMIT_MESSAGES", "")
     input_issue = os.environ.get("INPUT_ISSUE_KEY", "")
     input_transition = os.environ.get("INPUT_TRANSITION_ID", "")
 
@@ -25,22 +26,28 @@ def main():
     print(f"PR merged: {pr_merged}")
 
     transition_id = None
-    text_to_search = f"{ref_name} {pr_title} {input_issue}"
+    text_to_search = f"{ref_name} {pr_title} {commit_messages} {input_issue}"
 
     if event_name == "workflow_dispatch":
         transition_id = input_transition
     elif event_name == "create":
+        # Khi tạo branch mới -> Chuyển sang READY FOR DEV (ID: 61)
         if ref_type == "branch":
-            transition_id = "21"  # IN PROGRESS
+            transition_id = "61"
         else:
             print(f"Event 'create' with ref_type='{ref_type}' is not a branch creation. Exiting.")
             return
+    elif event_name == "push":
+        # Khi push commit vào feature branch -> Chuyển sang IN PROGRESS (ID: 21)
+        transition_id = "21"
     elif event_name == "pull_request":
         pr_action = os.environ.get("PR_ACTION", "")
         if pr_action in ["opened", "reopened"]:
-            transition_id = "71"  # READY FOR TEST
+            # Khi mở PR -> Chuyển sang READY FOR TEST (ID: 71)
+            transition_id = "71"
         elif pr_action == "closed" and pr_merged:
-            transition_id = "31"  # DONE
+            # Khi merge PR -> Chuyển sang DONE (ID: 31)
+            transition_id = "31"
         else:
             print(f"PR action '{pr_action}' (merged={pr_merged}) does not match transition trigger criteria. Exiting.")
             return
@@ -48,7 +55,7 @@ def main():
         print(f"Unhandled event: {event_name}. Exiting.")
         return
 
-    # Regex to find Jira Issue Key (e.g., COT-643, COT-123)
+    # Regex trích xuất Jira Issue Key (ví dụ: COT-643, COT-123)
     match = re.search(r'\b([A-Za-z]+-\d+)\b', text_to_search)
     if not match:
         print(f"No Jira issue key detected in '{text_to_search}'. Exiting.")
@@ -56,7 +63,7 @@ def main():
 
     issue_key = match.group(1).upper()
     print(f"Found Jira Issue Key: {issue_key}")
-    print(f"Executing transition ID: {transition_id}")
+    print(f"Target transition ID: {transition_id}")
 
     if not jira_email or not jira_api_token:
         print("::error::Missing JIRA_USER_EMAIL or JIRA_API_TOKEN secret. Please configure them in GitHub repository Secrets.")
