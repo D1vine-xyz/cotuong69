@@ -1,0 +1,49 @@
+name: Jira Sync Automation
+
+on:
+  create:
+  pull_request:
+    types: [opened, reopened, closed]
+  workflow_dispatch:
+    inputs:
+      issue_key:
+        description: 'Jira Issue Key (e.g. COT-643)'
+        required: true
+        type: string
+      transition_id:
+        description: 'Transition ID (11: To Do, 61: READY FOR DEV, 21: In Progress, 71: READY FOR TEST, 31: Done)'
+        required: true
+        default: '21'
+        type: choice
+        options:
+          - '21'
+          - '61'
+          - '71'
+          - '31'
+          - '11'
+
+jobs:
+  jira_transition:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout Repository
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.x'
+
+      - name: Sync Jira Status
+        env:
+          JIRA_BASE_URL: ${{ secrets.JIRA_BASE_URL || 'https://cotuong69.atlassian.net' }}
+          JIRA_USER_EMAIL: ${{ secrets.JIRA_USER_EMAIL }}
+          JIRA_API_TOKEN: ${{ secrets.JIRA_API_TOKEN }}
+          REF_TYPE: ${{ github.event.ref_type }}
+          REF_NAME: ${{ github.head_ref || github.event.ref }}
+          PR_TITLE: ${{ github.event.pull_request.title }}
+          PR_ACTION: ${{ github.event.action }}
+          PR_MERGED: ${{ github.event.pull_request.merged }}
+          INPUT_ISSUE_KEY: ${{ github.event.inputs.issue_key }}
+          INPUT_TRANSITION_ID: ${{ github.event.inputs.transition_id }}
+        run: python3 .github/scripts/jira_sync.py
