@@ -1,8 +1,12 @@
 {
   "name": "co-tuong-frontend",
   "version": "1.0.0",
+  "private": true,
   "description": "Frontend giao diện Cờ Tướng Online - Danh sách phòng và tìm kiếm mã phòng (COT-597)",
   "scripts": {
+    "dev": "vite",
+    "build": "vite build",
+    "preview": "vite preview",
     "test": "node --test tests/rooms.test.js"
   },
   "keywords": [
@@ -12,5 +16,14 @@
     "cot-597"
   ],
   "author": "Nguyen Tan Sang <sangcachop@gmail.com>",
-  "license": "ISC"
+  "license": "ISC",
+  "dependencies": {
+    "react": "^18.3.1",
+    "react-dom": "^18.3.1",
+    "react-router-dom": "^6.26.0"
+  },
+  "devDependencies": {
+    "@vitejs/plugin-react": "^4.3.1",
+    "vite": "^5.4.2"
+  }
 }

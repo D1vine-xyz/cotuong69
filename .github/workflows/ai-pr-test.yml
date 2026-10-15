@@ -1,0 +1,70 @@
+name: AI PR Quality Gate & Test Automation
+
+on:
+  pull_request:
+    types: [opened, synchronize, reopened]
+
+permissions:
+  pull-requests: write
+  issues: write
+  contents: read
+
+jobs:
+  test_and_verify:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout Code
+        uses: actions/checkout@v4
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 24
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.x'
+
+      - name: Install Dependencies
+        run: |
+          echo "📦 Cài đặt thư viện Backend..."
+          cd backend && npm install
+          echo "📦 Cài đặt thư viện Frontend..."
+          cd ../frontend && npm install
+
+      - name: Run Backend Tests
+        id: test_backend
+        run: |
+          cd backend
+          npm test 2>&1 | tee ../backend_test.log
+        continue-on-error: true
+
+      - name: Run Frontend Build
+        id: build_frontend
+        run: |
+          cd frontend
+          npm run build 2>&1 | tee ../frontend_build.log
+        continue-on-error: true
+
+      - name: AI Diagnosis & Auto Create Issue on Failure
+        if: steps.test_backend.outcome == 'failure' || steps.build_frontend.outcome == 'failure'
+        env:
+          JIRA_BASE_URL: ${{ secrets.JIRA_BASE_URL || 'https://cotuong69.atlassian.net' }}
+          JIRA_USER_EMAIL: ${{ secrets.JIRA_USER_EMAIL }}
+          JIRA_API_TOKEN: ${{ secrets.JIRA_API_TOKEN }}
+          GEMINI_API_KEY: ${{ secrets.GEMINI_API_KEY }}
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          PR_NUMBER: ${{ github.event.pull_request.number }}
+          PR_TITLE: ${{ github.event.pull_request.title }}
+          PR_URL: ${{ github.event.pull_request.html_url }}
+          PR_AUTHOR: ${{ github.event.pull_request.user.login }}
+          BACKEND_OUTCOME: ${{ steps.test_backend.outcome }}
+          FRONTEND_OUTCOME: ${{ steps.build_frontend.outcome }}
+        run: python3 .github/scripts/ai_pr_tester.py
+
+      - name: Block Merge on Failure
+        if: steps.test_backend.outcome == 'failure' || steps.build_frontend.outcome == 'failure'
+        run: |
+          echo "::error::Kiểm thử tự động thất bại! AI Agent đã lập Issue và phản hồi trên PR."
+          exit 1
