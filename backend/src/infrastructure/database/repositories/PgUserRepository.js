@@ -72,6 +72,26 @@ class PgUserRepository {
     );
     return await this.findById(userId);
   }
+
+  async updateProfile(userId, { displayName, avatarUrl } = {}) {
+    if (displayName !== undefined && avatarUrl !== undefined) {
+      await this.db.query(
+        `UPDATE users SET display_name = $1, avatar_url = $2 WHERE id = $3`,
+        [displayName, avatarUrl, Number(userId)]
+      );
+    } else if (displayName !== undefined) {
+      await this.db.query(
+        `UPDATE users SET display_name = $1 WHERE id = $2`,
+        [displayName, Number(userId)]
+      );
+    } else if (avatarUrl !== undefined) {
+      await this.db.query(
+        `UPDATE users SET avatar_url = $1 WHERE id = $2`,
+        [avatarUrl, Number(userId)]
+      );
+    }
+    return await this.findById(userId);
+  }
 }
 
 module.exports = PgUserRepository;
