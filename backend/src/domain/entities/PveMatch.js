@@ -38,4 +38,21 @@ const PVE_ACTOR = Object.freeze({
 
 const COLORS = Object.freeze(['red', 'black']);
 
-module.exports = { PVE_MATCH_STATUS, PVE_RESULT, PVE_END_REASON, PVE_ACTOR, COLORS };
+/**
+ * Kết quả trận theo góc nhìn người chơi khi biết bên thua
+ * @param {'red'|'black'} playerColor
+ * @param {'red'|'black'} loserColor
+ * @returns {'WIN'|'LOSS'}
+ */
+function resultForPlayer(playerColor, loserColor) {
+  return loserColor === playerColor ? PVE_RESULT.LOSS : PVE_RESULT.WIN;
+}
+
+module.exports = {
+  PVE_MATCH_STATUS,
+  PVE_RESULT,
+  PVE_END_REASON,
+  PVE_ACTOR,
+  COLORS,
+  resultForPlayer,
+};

@@ -122,6 +122,50 @@ describe('PgPveMatchRepository trên SQLite in-memory (COT-634)', () => {
     assert.equal(after.length, 0);
   });
 
+  it('finish chỉ chốt kết quả khi trận còn PLAYING, lần sau không ghi đè (COT-635)', async () => {
+    const match = await newMatch();
+    const first = await repo.finish({
+      matchId: match.id,
+      result: 'WIN',
+      endReason: 'CHECKMATE',
+      now: '2026-01-01T00:10:00.000Z',
+    });
+    assert.equal(first, true);
+    const second = await repo.finish({
+      matchId: match.id,
+      result: 'LOSS',
+      endReason: 'RESIGN',
+      now: '2026-01-01T00:20:00.000Z',
+    });
+    assert.equal(second, false);
+
+    const saved = await repo.findById(match.id);
+    assert.equal(saved.status, 'FINISHED');
+    assert.equal(saved.result, 'WIN');
+    assert.equal(saved.endReason, 'CHECKMATE');
+    assert.equal(saved.finishedAt.toISOString(), '2026-01-01T00:10:00.000Z');
+  });
+
+  it('Lượt máy với repository Pg: đi đúng một nước hợp lệ, gọi lặp không đi thêm (COT-635)', async () => {
+    const useCases = createPveUseCases({
+      pveMatchRepository: repo,
+      clock: createFakeClock(),
+      random: () => 0.5,
+    });
+    const match = await useCases.createPveMatch({ userId, playerColor: 'black' });
+    const first = await useCases.playBotTurn(match.id, { expectedPly: 0 });
+    assert.equal(first.played, true);
+    const again = await useCases.playBotTurn(match.id, { expectedPly: 0 });
+    assert.equal(again.played, false);
+    const moves = await repo.listMoves(match.id);
+    assert.equal(moves.length, 1);
+    assert.equal(moves[0].actor, 'BOT');
+    assert.equal(moves[0].side, 'red');
+    const saved = await repo.findById(match.id);
+    assert.equal(saved.ply, 1);
+    assert.equal(saved.sideToMove, 'black');
+  });
+
   it('Use-case submitPlayerMove dùng repository Pg: nước hợp lệ được lưu, nước sai không đổi CSDL', async () => {
     const useCases = createPveUseCases({ pveMatchRepository: repo, clock: createFakeClock() });
     const match = await useCases.createPveMatch({ userId, playerColor: 'red' });

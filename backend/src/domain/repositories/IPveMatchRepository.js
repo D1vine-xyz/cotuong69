@@ -39,7 +39,19 @@
  * @function listMoves
  * @param {number} matchId
  * @returns {Promise<PveMoveRecord[]>} Theo thứ tự ply tăng dần
+ *
+ * @function finish
+ * Chốt kết quả trận đúng MỘT lần: chỉ ghi khi trận còn PLAYING (UPDATE có điều kiện),
+ * lần gọi sau không ghi đè kết quả đã chốt.
+ * @param {{ matchId: number, result: 'WIN'|'LOSS', endReason: string, now: string }} data
+ * @returns {Promise<boolean>} true nếu lần gọi này đã chốt kết quả
  */
-const PVE_MATCH_REPOSITORY_METHODS = Object.freeze(['create', 'findById', 'saveMove', 'listMoves']);
+const PVE_MATCH_REPOSITORY_METHODS = Object.freeze([
+  'create',
+  'findById',
+  'saveMove',
+  'listMoves',
+  'finish',
+]);
 
 module.exports = { PVE_MATCH_REPOSITORY_METHODS };

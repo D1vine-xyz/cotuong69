@@ -116,6 +116,16 @@ class PgPveMatchRepository {
     return res.rows.map(toMoveRecord);
   }
 
+  async finish({ matchId, result, endReason, now }) {
+    const res = await this.db.query(
+      `UPDATE pve_matches
+       SET status = 'FINISHED', result = $1, end_reason = $2, finished_at = $3, updated_at = $4
+       WHERE id = $5 AND status = 'PLAYING'`,
+      [result, endReason, now, now, matchId]
+    );
+    return res.rowCount === 1;
+  }
+
   async withTransaction(work) {
     const client = await this.db.getClient();
     try {

@@ -61,6 +61,19 @@ class InMemoryPveMatchRepository {
     return true;
   }
 
+  async finish({ matchId, result, endReason, now }) {
+    const stored = this.matches.get(Number(matchId));
+    if (!stored || stored.status !== 'PLAYING') {
+      return false;
+    }
+    stored.status = 'FINISHED';
+    stored.result = result;
+    stored.endReason = endReason;
+    stored.finishedAt = now;
+    stored.updatedAt = now;
+    return true;
+  }
+
   async listMoves(matchId) {
     return (this.moves.get(Number(matchId)) || []).map((m) => ({
       ply: m.ply,
