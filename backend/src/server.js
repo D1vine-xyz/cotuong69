@@ -6,6 +6,7 @@ const { createMatchesHandler } = require('./presentation/http/routes/matches.rou
 const { createAuthHandler } = require('./presentation/http/routes/auth.routes');
 const { createUserHandler } = require('./presentation/http/routes/user.routes');
 const { createRoomHandler } = require('./presentation/http/routes/room.routes');
+const { createFriendsHandler } = require('./presentation/http/routes/friends.routes');
 const fs = require('node:fs');
 const path = require('node:path');
 
@@ -25,6 +26,7 @@ function createServer(options = {}) {
   const authHandler = options.authHandler || createAuthHandler(options.authOptions);
   const userHandler = options.userHandler || createUserHandler(options.userOptions);
   const roomHandler = options.roomHandler || createRoomHandler(options.roomOptions);
+  const friendsHandler = options.friendsHandler || createFriendsHandler(options.friendsOptions);
 
   const httpHandler = (req, res) => {
     let pathname = '';
@@ -44,6 +46,9 @@ function createServer(options = {}) {
     }
     if (pathname.startsWith('/api/rooms')) {
       return roomHandler(req, res);
+    }
+    if (pathname.startsWith('/api/friends')) {
+      return friendsHandler(req, res);
     }
     if (pathname.startsWith('/uploads/')) {
       const filePath = path.resolve(__dirname, '..', pathname.replace(/^\//, ''));
