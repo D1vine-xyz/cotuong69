@@ -1,0 +1,29 @@
+# Node.js & Dependencies
+node_modules/
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+.pnpm-debug.log*
+
+# Environment & Config
+.env
+.env.local
+.env.*.local
+*.sqlite
+*.sqlite3
+*.log
+
+# AI Agent Configuration & Rules (Không đưa lên GitHub)
+.agents/
+AGENTS.md
+GEMINI.md
+
+# Báo cáo cá nhân thành viên (Không đưa lên GitHub)
+TASK_REPORT_NGUYEN_TAN_SANG.md
+*REPORT_NGUYEN_TAN_SANG*.md
+
+# OS & IDE Files
+.DS_Store
+Thumbs.db
+.vscode/
+.idea/

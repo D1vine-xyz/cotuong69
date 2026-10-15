@@ -1,0 +1,16 @@
+{
+  "name": "co-tuong-frontend",
+  "version": "1.0.0",
+  "description": "Frontend giao diện Cờ Tướng Online - Danh sách phòng và tìm kiếm mã phòng (COT-597)",
+  "scripts": {
+    "test": "node --test tests/rooms.test.js"
+  },
+  "keywords": [
+    "co-tuong",
+    "chinese-chess",
+    "rooms",
+    "cot-597"
+  ],
+  "author": "Nguyen Tan Sang <sangcachop@gmail.com>",
+  "license": "ISC"
+}
