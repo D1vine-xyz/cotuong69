@@ -18,6 +18,7 @@ jobs:
         with:
           ref: ${{ github.event.pull_request.head.sha }}
           fetch-depth: 0
+          allow-unsafe-pr-checkout: true
 
       - name: Set up Node.js
         uses: actions/setup-node@v4
@@ -31,24 +32,36 @@ jobs:
 
       - name: Install Dependencies
         run: |
-          echo "📦 Cài đặt thư viện Backend..."
-          cd backend && npm install
-          echo "📦 Cài đặt thư viện Frontend..."
-          cd ../frontend && npm install
+          if [ -f "backend/package.json" ]; then
+            echo "📦 Cài đặt thư viện Backend..."
+            cd backend && npm install && cd ..
+          fi
+          if [ -f "frontend/package.json" ]; then
+            echo "📦 Cài đặt thư viện Frontend..."
+            cd frontend && npm install && cd ..
+          fi
 
       - name: Run Backend Tests
         id: test_backend
         run: |
-          cd backend
-          npm test 2>&1 | tee ../backend_test.log
+          if [ -f "backend/package.json" ]; then
+            cd backend
+            npm test 2>&1 | tee ../backend_test.log
+          else
+            echo "Không có backend/package.json, bỏ qua backend tests."
+          fi
         continue-on-error: true
 
       - name: Run Frontend Tests & Build
         id: build_frontend
         run: |
-          cd frontend
-          npm test 2>&1 | tee ../frontend_test.log || true
-          npm run build 2>&1 | tee ../frontend_build.log
+          if [ -f "frontend/package.json" ]; then
+            cd frontend
+            npm test 2>&1 | tee ../frontend_test.log || true
+            npm run build 2>&1 | tee ../frontend_build.log
+          else
+            echo "Không có frontend/package.json, bỏ qua frontend tests & build."
+          fi
         continue-on-error: true
 
       - name: AI Quality Gate & Scope Verification
