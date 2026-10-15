@@ -75,6 +75,16 @@ class PgPasswordResetRepository {
     );
     return res.rows[0] || null;
   }
+
+  /**
+   * Đánh dấu token đã được sử dụng
+   */
+  async markTokenUsed(token) {
+    await this.db.query(
+      `UPDATE password_reset_tokens SET is_used = 1 WHERE token = $1`,
+      [token]
+    );
+  }
 }
 
 module.exports = PgPasswordResetRepository;
