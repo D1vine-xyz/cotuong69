@@ -25,6 +25,15 @@ def main():
     print(f"PR title: {pr_title}")
     print(f"PR merged: {pr_merged}")
 
+    # Nhận diện hành vi Revert Pull Request / Commit
+    is_revert = bool(
+        re.search(r'\brevert\b', pr_title, re.IGNORECASE) or
+        re.search(r'\brevert\b', ref_name, re.IGNORECASE) or
+        re.search(r'\brevert\b', commit_messages, re.IGNORECASE)
+    )
+    if is_revert:
+        print("ℹ️ Phát hiện thao tác REVERT Pull Request / Commit.")
+
     transition_id = None
     text_to_search = f"{ref_name} {pr_title} {commit_messages} {input_issue}"
 
@@ -42,26 +51,36 @@ def main():
         transition_id = "21"
     elif event_name in ["pull_request", "pull_request_target"]:
         pr_action = os.environ.get("PR_ACTION", "")
-        if pr_action in ["opened", "reopened"]:
-            # Khi mở PR -> Chuyển sang READY FOR TEST (ID: 71)
-            transition_id = "71"
-        elif pr_action == "closed" and pr_merged:
-            # Khi merge PR -> Chuyển sang DONE (ID: 31)
-            transition_id = "31"
+        if is_revert:
+            # Khi mở Revert PR hoặc khi merge Revert PR -> Lùi task về IN PROGRESS (ID: 21)
+            if pr_action in ["opened", "reopened"] or (pr_action == "closed" and pr_merged):
+                transition_id = "21"
+                print(f"Revert PR (action: {pr_action}, merged: {pr_merged}) -> Lùi trạng thái task về IN PROGRESS (ID: 21)")
+            else:
+                print(f"Revert PR action '{pr_action}' (merged={pr_merged}) không khớp điều kiện lùi trạng thái. Exiting.")
+                return
         else:
-            print(f"PR action '{pr_action}' (merged={pr_merged}) does not match transition trigger criteria. Exiting.")
-            return
+            if pr_action in ["opened", "reopened"]:
+                # Khi mở PR thông thường -> Chuyển sang READY FOR TEST (ID: 71)
+                transition_id = "71"
+            elif pr_action == "closed" and pr_merged:
+                # Khi merge PR thông thường -> Chuyển sang DONE (ID: 31)
+                transition_id = "31"
+            else:
+                print(f"PR action '{pr_action}' (merged={pr_merged}) does not match transition trigger criteria. Exiting.")
+                return
     else:
         print(f"Unhandled event: {event_name}. Exiting.")
         return
 
-    # Regex trích xuất Jira Issue Key (ví dụ: COT-643, COT-123)
-    match = re.search(r'\b([A-Za-z]+-\d+)\b', text_to_search)
-    if not match:
-        print(f"No Jira issue key detected in '{text_to_search}'. Exiting.")
+    # Regex trích xuất Jira Issue Key, bỏ qua tiền tố tự sinh 'revert-\d+' của GitHub
+    matches = re.findall(r'\b([A-Za-z][A-Za-z0-9_]*-\d+)\b', text_to_search)
+    valid_matches = [m.upper() for m in matches if not m.upper().startswith("REVERT-")]
+    if not valid_matches:
+        print(f"Không tìm thấy Jira Issue Key hợp lệ trong: '{text_to_search}'. Exiting.")
         return
 
-    issue_key = match.group(1).upper()
+    issue_key = valid_matches[0]
     print(f"Found Jira Issue Key: {issue_key}")
     print(f"Target transition ID: {transition_id}")
 
@@ -80,13 +99,38 @@ def main():
         "User-Agent": "GitHub-Actions-Jira-Sync"
     }
 
-    payload = json.dumps({"transition": {"id": str(transition_id)}}).encode("utf-8")
+    target_id_str = str(transition_id)
+    try:
+        get_req = urllib.request.Request(url, headers=headers, method="GET")
+        with urllib.request.urlopen(get_req) as resp:
+            data = json.loads(resp.read().decode("utf-8"))
+            available = data.get("transitions", [])
+            valid_ids = [t["id"] for t in available]
+            t_list = [t.get('name', '') + ' (' + str(t.get('id', '')) + ')' for t in available]
+            print(f'Available transitions for {issue_key}: {t_list}')
+            if target_id_str not in valid_ids:
+                status_name_map = {
+                    "21": "in progress",
+                    "31": "done",
+                    "61": "ready for dev",
+                    "71": "ready for test",
+                    "11": "to do"
+                }
+                wanted = status_name_map.get(target_id_str, "")
+                matched = next((t["id"] for t in available if wanted in t.get("name", "").lower() or wanted in t.get("to", {}).get("name", "").lower()), None)
+                if matched:
+                    print(f"Đã tự động ánh xạ trạng thái '{wanted}' sang Transition ID {matched}")
+                    target_id_str = matched
+    except Exception as e:
+        print(f"Notice: Không thể truy vấn danh sách transition trước ({e}), dùng Transition ID mặc định {target_id_str}")
+
+    payload = json.dumps({"transition": {"id": target_id_str}}).encode("utf-8")
     req = urllib.request.Request(url, data=payload, headers=headers, method="POST")
 
     try:
         with urllib.request.urlopen(req) as response:
             if response.status in (200, 204):
-                print(f"✅ Successfully transitioned {issue_key} to transition ID {transition_id}!")
+                print(f"✅ Successfully transitioned {issue_key} to transition ID {target_id_str}!")
             else:
                 print(f"⚠️ Jira API responded with status {response.status}")
     except urllib.error.HTTPError as e:
