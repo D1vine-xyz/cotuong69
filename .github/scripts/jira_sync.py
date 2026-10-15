@@ -20,8 +20,9 @@ def main():
     input_issue = os.environ.get("INPUT_ISSUE_KEY", "")
     input_transition = os.environ.get("INPUT_TRANSITION_ID", "")
 
+    clean_ref = ref_name.replace("refs/heads/", "").strip()
     print(f"Triggered by event: {event_name}")
-    print(f"Ref name: {ref_name} (type: {ref_type})")
+    print(f"Ref name: {ref_name} (clean: {clean_ref}, type: {ref_type})")
     print(f"PR title: {pr_title}")
     print(f"PR merged: {pr_merged}")
 
@@ -47,8 +48,13 @@ def main():
             print(f"Event 'create' with ref_type='{ref_type}' is not a branch creation. Exiting.")
             return
     elif event_name == "push":
-        # Khi push commit vào feature branch -> Chuyển sang IN PROGRESS (ID: 21)
-        transition_id = "21"
+        # Nếu push trực tiếp vào main hoặc master -> Chủ repo đưa code vào mainline -> DONE (ID: 31)
+        if clean_ref in ["main", "master"]:
+            transition_id = "31"
+            print(f"Push trực tiếp vào nhánh chính '{clean_ref}' -> Tự động chuyển Jira task sang DONE (ID: 31)")
+        else:
+            # Khi push commit vào feature branch -> Chuyển sang IN PROGRESS (ID: 21)
+            transition_id = "21"
     elif event_name in ["pull_request", "pull_request_target"]:
         pr_action = os.environ.get("PR_ACTION", "")
         if is_revert:
@@ -73,15 +79,15 @@ def main():
         print(f"Unhandled event: {event_name}. Exiting.")
         return
 
-    # Regex trích xuất Jira Issue Key, bỏ qua tiền tố tự sinh 'revert-\d+' của GitHub
+    # Regex trích xuất tất cả Jira Issue Keys, bỏ qua tiền tố tự sinh 'revert-\d+' của GitHub
     matches = re.findall(r'\b([A-Za-z][A-Za-z0-9_]*-\d+)\b', text_to_search)
     valid_matches = [m.upper() for m in matches if not m.upper().startswith("REVERT-")]
     if not valid_matches:
         print(f"Không tìm thấy Jira Issue Key hợp lệ trong: '{text_to_search}'. Exiting.")
         return
 
-    issue_key = valid_matches[0]
-    print(f"Found Jira Issue Key: {issue_key}")
+    unique_keys = list(dict.fromkeys(valid_matches))
+    print(f"Found Jira Issue Keys: {unique_keys}")
     print(f"Target transition ID: {transition_id}")
 
     if not jira_email or not jira_api_token:
@@ -90,8 +96,6 @@ def main():
 
     auth_str = f"{jira_email}:{jira_api_token}"
     auth_b64 = base64.b64encode(auth_str.encode("utf-8")).decode("utf-8")
-
-    url = f"{jira_base_url}/rest/api/3/issue/{issue_key}/transitions"
     headers = {
         "Authorization": f"Basic {auth_b64}",
         "Content-Type": "application/json",
@@ -99,47 +103,50 @@ def main():
         "User-Agent": "GitHub-Actions-Jira-Sync"
     }
 
-    target_id_str = str(transition_id)
-    try:
-        get_req = urllib.request.Request(url, headers=headers, method="GET")
-        with urllib.request.urlopen(get_req) as resp:
-            data = json.loads(resp.read().decode("utf-8"))
-            available = data.get("transitions", [])
-            valid_ids = [t["id"] for t in available]
-            t_list = [t.get('name', '') + ' (' + str(t.get('id', '')) + ')' for t in available]
-            print(f'Available transitions for {issue_key}: {t_list}')
-            if target_id_str not in valid_ids:
-                status_name_map = {
-                    "21": "in progress",
-                    "31": "done",
-                    "61": "ready for dev",
-                    "71": "ready for test",
-                    "11": "to do"
-                }
-                wanted = status_name_map.get(target_id_str, "")
-                matched = next((t["id"] for t in available if wanted in t.get("name", "").lower() or wanted in t.get("to", {}).get("name", "").lower()), None)
-                if matched:
-                    print(f"Đã tự động ánh xạ trạng thái '{wanted}' sang Transition ID {matched}")
-                    target_id_str = matched
-    except Exception as e:
-        print(f"Notice: Không thể truy vấn danh sách transition trước ({e}), dùng Transition ID mặc định {target_id_str}")
+    status_name_map = {
+        "21": "in progress",
+        "31": "done",
+        "61": "ready for dev",
+        "71": "ready for test",
+        "11": "to do"
+    }
 
-    payload = json.dumps({"transition": {"id": target_id_str}}).encode("utf-8")
-    req = urllib.request.Request(url, data=payload, headers=headers, method="POST")
+    for issue_key in unique_keys:
+        url = f"{jira_base_url}/rest/api/3/issue/{issue_key}/transitions"
+        target_id_str = str(transition_id)
+        try:
+            get_req = urllib.request.Request(url, headers=headers, method="GET")
+            with urllib.request.urlopen(get_req) as resp:
+                data = json.loads(resp.read().decode("utf-8"))
+                available = data.get("transitions", [])
+                valid_ids = [t["id"] for t in available]
+                print(f"Available transitions for {issue_key}: {[f"{t['name']} ({t['id']})" for t in available]}")
+                if target_id_str not in valid_ids:
+                    wanted = status_name_map.get(target_id_str, "")
+                    matched = next((t["id"] for t in available if wanted in t.get("name", "").lower() or wanted in t.get("to", {}).get("name", "").lower()), None)
+                    if matched:
+                        print(f"Đã tự động ánh xạ trạng thái '{wanted}' sang Transition ID {matched}")
+                        target_id_str = matched
+                    else:
+                        print(f"ℹ️ Issue {issue_key} hiện không có transition '{wanted}' (có thể đã ở trạng thái này rồi). Bỏ qua.")
+                        continue
+        except Exception as e:
+            print(f"Notice: Không thể truy vấn danh sách transition trước ({e}), dùng Transition ID mặc định {target_id_str}")
 
-    try:
-        with urllib.request.urlopen(req) as response:
-            if response.status in (200, 204):
-                print(f"✅ Successfully transitioned {issue_key} to transition ID {target_id_str}!")
-            else:
-                print(f"⚠️ Jira API responded with status {response.status}")
-    except urllib.error.HTTPError as e:
-        error_body = e.read().decode("utf-8")
-        print(f"::error::Jira API Error HTTP {e.code}: {e.reason} -> {error_body}")
-        sys.exit(1)
-    except Exception as e:
-        print(f"::error::Unexpected error: {str(e)}")
-        sys.exit(1)
+        payload = json.dumps({"transition": {"id": target_id_str}}).encode("utf-8")
+        req = urllib.request.Request(url, data=payload, headers=headers, method="POST")
+
+        try:
+            with urllib.request.urlopen(req) as response:
+                if response.status in (200, 204):
+                    print(f"✅ Successfully transitioned {issue_key} to transition ID {target_id_str}!")
+                else:
+                    print(f"⚠️ Jira API responded with status {response.status}")
+        except urllib.error.HTTPError as e:
+            error_body = e.read().decode("utf-8")
+            print(f"⚠️ Jira API Notice for {issue_key} HTTP {e.code}: {e.reason} -> {error_body}")
+        except Exception as e:
+            print(f"⚠️ Unexpected error for {issue_key}: {str(e)}")
 
 if __name__ == "__main__":
     main()

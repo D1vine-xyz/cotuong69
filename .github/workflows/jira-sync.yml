@@ -3,9 +3,6 @@ name: Jira Sync Automation
 on:
   create:
   push:
-    branches-ignore:
-      - main
-      - master
   pull_request_target:
     types: [opened, reopened, closed]
   workflow_dispatch:
