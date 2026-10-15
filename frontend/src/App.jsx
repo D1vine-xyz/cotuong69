@@ -35,14 +35,55 @@ function PlayerCard({ player, color, active, time }) {
   );
 }
 
+function playMoveSound(captured) {
+  const AudioContextType = window.AudioContext || window.webkitAudioContext;
+  if (!AudioContextType) return;
+
+  const audio = new AudioContextType();
+  const oscillator = audio.createOscillator();
+  const gain = audio.createGain();
+  oscillator.type = 'sine';
+  oscillator.frequency.value = captured ? 520 : 660;
+  gain.gain.setValueAtTime(0.0001, audio.currentTime);
+  gain.gain.exponentialRampToValueAtTime(0.12, audio.currentTime + 0.012);
+  gain.gain.exponentialRampToValueAtTime(0.0001, audio.currentTime + 0.16);
+  oscillator.connect(gain);
+  gain.connect(audio.destination);
+  oscillator.start();
+  oscillator.stop(audio.currentTime + 0.17);
+  oscillator.addEventListener('ended', () => audio.close());
+}
+
 function App() {
   const matchId = new URLSearchParams(window.location.search).get('matchId');
-  const { match, loading, error } = useMatch(matchId);
+  const {
+    match,
+    loading,
+    error,
+    color,
+    readOnly,
+    connected,
+    movePending,
+    moveError,
+    moveResult,
+    sendMove,
+    clearMoveError,
+  } = useMatch(matchId);
 
   useEffect(() => {
     document.body.classList.toggle('match-view', Boolean(matchId));
     return () => document.body.classList.remove('match-view');
   }, [matchId]);
+
+  useEffect(() => {
+    if (moveResult) playMoveSound(moveResult.captured);
+  }, [moveResult]);
+
+  useEffect(() => {
+    if (!moveError) return undefined;
+    const timeout = window.setTimeout(clearMoveError, 4000);
+    return () => window.clearTimeout(timeout);
+  }, [moveError, clearMoveError]);
 
   if (!matchId) {
     return null;
@@ -82,7 +123,7 @@ function App() {
         </div>
         <div className="topbar-right">
           <span className="demo-indicator"><i /> BẢN XEM TRƯỚC</span>
-          <span className="viewer-pill"><span aria-hidden="true">◉</span> Khán giả</span>
+          <span className="viewer-pill"><span aria-hidden="true">◉</span> {readOnly ? 'Khán giả' : `Quân ${color === 'red' ? 'Đỏ' : 'Đen'}`}</span>
           <button className="icon-button" type="button" aria-label="Tùy chọn">•••</button>
         </div>
       </header>
@@ -111,7 +152,12 @@ function App() {
             <XiangqiBoard
               pieces={match.board}
               countdown={countdown}
-              readOnly
+              readOnly={readOnly}
+              playerColor={color}
+              interactive={!readOnly && !isStarting && currentTurn === color && !movePending}
+              movePending={movePending}
+              orientation={color === 'black' ? 'black' : 'red'}
+              onMove={sendMove}
             />
             <PlayerCard
               player={match.players.red}
@@ -121,11 +167,20 @@ function App() {
             />
           </div>
 
-          <div className="spectator-note">
-            <span className="spectator-icon" aria-hidden="true">◉</span>
-            <span><strong>Bạn đang ở chế độ khán giả</strong><br />Bạn có thể xem toàn bộ bàn cờ nhưng không thể điều khiển quân.</span>
-            <span className="spectator-lock" aria-hidden="true">⌑</span>
-          </div>
+          {readOnly ? (
+            <div className="spectator-note">
+              <span className="spectator-icon" aria-hidden="true">◉</span>
+              <span><strong>Bạn đang ở chế độ khán giả</strong><br />Bạn có thể xem toàn bộ bàn cờ nhưng không thể điều khiển quân.</span>
+              <span className="spectator-lock" aria-hidden="true">⌑</span>
+            </div>
+          ) : (
+            <div className="spectator-note player-instructions">
+              <span className="spectator-icon" aria-hidden="true">♟</span>
+              <span><strong>Bạn đang chơi bên {color === 'red' ? 'Đỏ' : 'Đen'}</strong><br />Chọn quân rồi chạm ô đích, hoặc kéo quân đến ô muốn đi.</span>
+              <span className="spectator-lock" aria-hidden="true">{movePending ? 'Đang gửi nước đi…' : 'Không hiển thị gợi ý nước đi'}</span>
+            </div>
+          )}
+          {moveError && <div className="move-alert" role="alert">{moveError}</div>}
         </section>
 
         <aside className="info-column">
@@ -176,7 +231,7 @@ function App() {
 
           <div className={`connection-state ${error ? 'connection-error' : ''}`}>
             <span className={`connection-dot ${error ? 'error-dot' : ''}`} />
-            {error ? 'Mất kết nối — đang thử lại' : 'Đã kết nối máy chủ'}
+            {error ? 'Mất kết nối — đang thử lại' : connected ? 'Đã kết nối thời gian thực' : 'Đang kết nối thời gian thực'}
           </div>
         </aside>
       </div>
