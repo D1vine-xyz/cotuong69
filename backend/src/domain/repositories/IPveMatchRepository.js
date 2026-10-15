@@ -28,7 +28,8 @@
  * @returns {Promise<object|null>}
  *
  * @function saveMove
- * Lưu nước đi một cách nguyên tử: cập nhật bàn cờ, đổi lượt, tăng ply và ghi pve_moves
+ * Lưu nước đi một cách nguyên tử: cập nhật bàn cờ, đổi lượt, tăng ply, đặt lại thời điểm
+ * bắt đầu lượt (turnStartedAt = now) và ghi pve_moves
  * CHỈ KHI trận đang PLAYING và ply hiện tại đúng bằng expectedPly. Ngược lại không ghi gì.
  * @param {{ matchId: number, expectedPly: number, board: Array, sideToMove: string,
  *           move: { side: string, actor: string, pieceType: string, from: Square, to: Square,
@@ -42,9 +43,17 @@
  *
  * @function finish
  * Chốt kết quả trận đúng MỘT lần: chỉ ghi khi trận còn PLAYING (UPDATE có điều kiện),
- * lần gọi sau không ghi đè kết quả đã chốt.
- * @param {{ matchId: number, result: 'WIN'|'LOSS', endReason: string, now: string }} data
+ * lần gọi sau không ghi đè kết quả đã chốt. Có expectedPly thì chỉ ghi khi ply còn khớp
+ * (dùng cho hết giờ: người chơi vừa kịp đi nước thì không bị xử thua).
+ * @param {{ matchId: number, result: 'WIN'|'LOSS', endReason: string, now: string,
+ *           expectedPly?: number }} data
  * @returns {Promise<boolean>} true nếu lần gọi này đã chốt kết quả
+ *
+ * @function listByUser
+ * Danh sách trận của người chơi (mới nhất trước), không kèm bàn cờ.
+ * @param {number} userId
+ * @param {{ status?: 'PLAYING'|'FINISHED', limit?: number, offset?: number }} [options]
+ * @returns {Promise<object[]>}
  */
 const PVE_MATCH_REPOSITORY_METHODS = Object.freeze([
   'create',
@@ -52,6 +61,7 @@ const PVE_MATCH_REPOSITORY_METHODS = Object.freeze([
   'saveMove',
   'listMoves',
   'finish',
+  'listByUser',
 ]);
 
 module.exports = { PVE_MATCH_REPOSITORY_METHODS };

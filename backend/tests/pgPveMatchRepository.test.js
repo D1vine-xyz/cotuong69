@@ -166,6 +166,78 @@ describe('PgPveMatchRepository trên SQLite in-memory (COT-634)', () => {
     assert.equal(saved.sideToMove, 'black');
   });
 
+  it('turnStartedAt được đặt khi tạo trận và đặt lại sau mỗi nước đi (COT-636)', async () => {
+    const match = await newMatch();
+    assert.equal(match.turnStartedAt.toISOString(), NOW);
+    await repo.saveMove({
+      matchId: match.id,
+      expectedPly: 0,
+      board: createInitialBoard(),
+      sideToMove: 'black',
+      move: { side: 'red', actor: 'PLAYER', pieceType: 'C', from: { row: 2, col: 1 }, to: { row: 2, col: 4 }, capturedType: null },
+      now: '2026-01-01T00:00:42.000Z',
+    });
+    const saved = await repo.findById(match.id);
+    assert.equal(saved.turnStartedAt.toISOString(), '2026-01-01T00:00:42.000Z');
+  });
+
+  it('finish kèm expectedPly không chốt khi ply đã thay đổi (COT-636)', async () => {
+    const match = await newMatch();
+    const stale = await repo.finish({
+      matchId: match.id,
+      result: 'LOSS',
+      endReason: 'TIMEOUT',
+      now: NOW,
+      expectedPly: 5,
+    });
+    assert.equal(stale, false);
+    assert.equal((await repo.findById(match.id)).status, 'PLAYING');
+    const ok = await repo.finish({ matchId: match.id, result: 'LOSS', endReason: 'TIMEOUT', now: NOW, expectedPly: 0 });
+    assert.equal(ok, true);
+  });
+
+  it('listByUser lọc theo người chơi và trạng thái, mới nhất trước, có phân trang (COT-636)', async () => {
+    await db.query('INSERT INTO users (username, display_name, email) VALUES ($1, $2, $3)', [
+      'pve_history',
+      'Lịch Sử',
+      'pve_history@cotuong.vn',
+    ]);
+    const owner = (await db.query('SELECT id FROM users WHERE username = $1', ['pve_history'])).rows[0].id;
+    const ids = [];
+    for (const [i, status] of ['FINISHED', 'PLAYING', 'FINISHED'].entries()) {
+      const created = await repo.create({
+        userId: owner,
+        playerColor: 'red',
+        botColor: 'black',
+        board: createInitialBoard(),
+        sideToMove: 'red',
+        now: `2026-02-0${i + 1}T00:00:00.000Z`,
+      });
+      if (status === 'FINISHED') {
+        await repo.finish({ matchId: created.id, result: 'WIN', endReason: 'RESIGN', now: NOW });
+      }
+      ids.push(created.id);
+    }
+
+    const finished = await repo.listByUser(owner, { status: 'FINISHED' });
+    assert.deepEqual(
+      finished.map((m) => m.id),
+      [ids[2], ids[0]]
+    );
+    assert.equal(finished[0].board, undefined);
+    assert.equal(finished[0].result, 'WIN');
+    const all = await repo.listByUser(owner);
+    assert.deepEqual(
+      all.map((m) => m.id),
+      [ids[2], ids[1], ids[0]]
+    );
+    const page = await repo.listByUser(owner, { limit: 1, offset: 1 });
+    assert.deepEqual(
+      page.map((m) => m.id),
+      [ids[1]]
+    );
+  });
+
   it('Use-case submitPlayerMove dùng repository Pg: nước hợp lệ được lưu, nước sai không đổi CSDL', async () => {
     const useCases = createPveUseCases({ pveMatchRepository: repo, clock: createFakeClock() });
     const match = await useCases.createPveMatch({ userId, playerColor: 'red' });

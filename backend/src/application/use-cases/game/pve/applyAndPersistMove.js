@@ -101,6 +101,13 @@ function makeApplyAndPersistMove({
       now: now.toISOString(),
     });
     if (!saved) {
+      const current = await pveMatchRepository.findById(match.id);
+      if (current && current.status !== PVE_MATCH_STATUS.PLAYING) {
+        throw new AppError(ERROR_CODES.MATCH_FINISHED, 'Trận đấu đã kết thúc', {
+          matchId: match.id,
+          endReason: current.endReason,
+        });
+      }
       throw new AppError(
         ERROR_CODES.MOVE_CONFLICT,
         'Trạng thái trận đã thay đổi trước khi lưu nước đi, vui lòng tải lại trận',
@@ -125,6 +132,7 @@ function makeApplyAndPersistMove({
         sideToMove: nextSide,
         ply: match.ply + 1,
         updatedAt: now,
+        turnStartedAt: now,
       },
       move: savedMove,
       gameStatus,

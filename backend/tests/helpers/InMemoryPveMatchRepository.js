@@ -19,6 +19,7 @@ class InMemoryPveMatchRepository {
       createdAt: new Date(stored.createdAt),
       updatedAt: new Date(stored.updatedAt),
       finishedAt: stored.finishedAt ? new Date(stored.finishedAt) : null,
+      turnStartedAt: new Date(stored.turnStartedAt),
     };
   }
 
@@ -38,6 +39,7 @@ class InMemoryPveMatchRepository {
       createdAt: now,
       updatedAt: now,
       finishedAt: null,
+      turnStartedAt: now,
     });
     this.moves.set(id, []);
     return this.findById(id);
@@ -57,13 +59,17 @@ class InMemoryPveMatchRepository {
     stored.sideToMove = sideToMove;
     stored.ply += 1;
     stored.updatedAt = now;
+    stored.turnStartedAt = now;
     this.moves.get(stored.id).push({ ...clone(move), ply: stored.ply, createdAt: now });
     return true;
   }
 
-  async finish({ matchId, result, endReason, now }) {
+  async finish({ matchId, result, endReason, now, expectedPly }) {
     const stored = this.matches.get(Number(matchId));
     if (!stored || stored.status !== 'PLAYING') {
+      return false;
+    }
+    if (expectedPly !== undefined && stored.ply !== expectedPly) {
       return false;
     }
     stored.status = 'FINISHED';
@@ -72,6 +78,17 @@ class InMemoryPveMatchRepository {
     stored.finishedAt = now;
     stored.updatedAt = now;
     return true;
+  }
+
+  async listByUser(userId, { status, limit = 20, offset = 0 } = {}) {
+    return [...this.matches.values()]
+      .filter((m) => String(m.userId) === String(userId) && (!status || m.status === status))
+      .sort((a, b) => b.createdAt.localeCompare(a.createdAt) || b.id - a.id)
+      .slice(offset, offset + limit)
+      .map((m) => {
+        const { board, ...summary } = this.toMatch(m);
+        return summary;
+      });
   }
 
   async listMoves(matchId) {

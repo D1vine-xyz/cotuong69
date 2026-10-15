@@ -16,10 +16,11 @@ const END_REASONS = Object.values(PVE_END_REASON);
 function makeFinishPveMatch({ pveMatchRepository, clock = () => new Date() }) {
   /**
    * @param {number} matchId
-   * @param {{ result: 'WIN'|'LOSS', endReason: string }} outcome - Theo góc nhìn người chơi
+   * @param {{ result: 'WIN'|'LOSS', endReason: string, expectedPly?: number }} outcome
+   *   Kết quả theo góc nhìn người chơi; expectedPly để chỉ chốt khi chưa có nước đi mới
    * @returns {Promise<{ finished: boolean, match: object }>} finished = lần gọi này đã chốt kết quả
    */
-  return async function finishPveMatch(matchId, { result, endReason }) {
+  return async function finishPveMatch(matchId, { result, endReason, expectedPly }) {
     if (!RESULTS.includes(result) || !END_REASONS.includes(endReason)) {
       throw new AppError(ERROR_CODES.INVALID_INPUT, 'Kết quả hoặc lý do kết thúc không hợp lệ', {
         result,
@@ -31,6 +32,7 @@ function makeFinishPveMatch({ pveMatchRepository, clock = () => new Date() }) {
       result,
       endReason,
       now: clock().toISOString(),
+      expectedPly,
     });
     const match = await pveMatchRepository.findById(matchId);
     if (!match) {
