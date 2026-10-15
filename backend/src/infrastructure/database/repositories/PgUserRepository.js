@@ -64,6 +64,14 @@ class PgUserRepository {
     );
     return await this.findByUsername(username.trim());
   }
+
+  async updatePassword(userId, passwordHash) {
+    await this.db.query(
+      `UPDATE users SET password_hash = $1 WHERE id = $2`,
+      [passwordHash, Number(userId)]
+    );
+    return await this.findById(userId);
+  }
 }
 
 module.exports = PgUserRepository;

@@ -2,6 +2,7 @@ const { URL } = require('node:url');
 const RegisterUserUseCase = require('../../../application/useCases/registerUser');
 const LoginUserUseCase = require('../../../application/useCases/loginUser');
 const ForgotPasswordUseCase = require('../../../application/useCases/forgotPassword');
+const ResetPasswordUseCase = require('../../../application/useCases/resetPassword');
 const { authenticateRequest } = require('../middlewares/authMiddleware');
 const PgUserRepository = require('../../../infrastructure/database/repositories/PgUserRepository');
 
@@ -47,6 +48,7 @@ function createAuthHandler({
   registerUseCase = new RegisterUserUseCase(),
   loginUseCase = new LoginUserUseCase(),
   forgotPasswordUseCase = new ForgotPasswordUseCase(),
+  resetPasswordUseCase = new ResetPasswordUseCase(),
   userRepository = new PgUserRepository(),
   authMiddlewareOptions = {},
 } = {}) {
@@ -163,7 +165,38 @@ function createAuthHandler({
       return;
     }
 
-    // 4. Lấy thông tin phiên hiện tại (Protected API - COT-572)
+    // 4. Đặt lại mật khẩu (COT-576)
+    if (pathname === '/api/auth/reset-password') {
+      if (request.method !== 'POST') {
+        sendJson(response, 405, { error: 'Phương thức không được hỗ trợ. Chỉ chấp nhận POST.' });
+        return;
+      }
+
+      let payload;
+      try {
+        payload = await parseJsonBody(request);
+      } catch (err) {
+        sendJson(response, 400, { error: err.message });
+        return;
+      }
+
+      try {
+        const result = await resetPasswordUseCase.execute(payload);
+        sendJson(response, 200, result);
+      } catch (err) {
+        if (err.code === 'VALIDATION_ERROR') {
+          sendJson(response, 400, { error: err.message });
+        } else if (err.code === 'TOKEN_ALREADY_USED' || err.code === 'TOKEN_EXPIRED' || err.code === 'INVALID_TOKEN') {
+          sendJson(response, 400, { error: err.message, code: err.code });
+        } else {
+          console.error('Lỗi khi đặt lại mật khẩu:', err);
+          sendJson(response, 500, { error: 'Lỗi máy chủ nội bộ. Vui lòng thử lại sau.' });
+        }
+      }
+      return;
+    }
+
+    // 5. Lấy thông tin phiên hiện tại (Protected API - COT-572)
     if (pathname === '/api/auth/me') {
       if (request.method !== 'GET') {
         sendJson(response, 405, { error: 'Phương thức không được hỗ trợ. Chỉ chấp nhận GET.' });
