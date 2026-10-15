@@ -4,12 +4,18 @@
  * - Kiểm tra trận đang PLAYING và đúng lượt của `side`.
  * - Kiểm tra hợp lệ bằng engine luật dùng chung (isLegalMove đã bao gồm không tự để Tướng bị chiếu).
  * - Áp dụng nước bằng applyMove của engine, lưu bàn cờ + lịch sử nước đi, tăng ply, chuyển lượt.
+ * - COT-635: sau mỗi nước (của người hoặc máy) xét trạng thái ván cho bên vừa tới lượt bằng
+ *   getGameStatus; Chiếu Bí / Hết nước thì gọi luồng kết thúc trận (bên hết nước thua).
  * Nước không hợp lệ ném AppError và KHÔNG ghi gì xuống CSDL.
  */
 const { ROWS, COLS } = require('../../../../domain/rules/board');
 const { isLegalMove, applyMove, opponentOf } = require('../../../../domain/rules/moveGenerator');
-const { PVE_MATCH_STATUS } = require('../../../../domain/entities/PveMatch');
+const { GAME_STATUS, getGameStatus } = require('../../../../domain/rules/gameStatus');
+const { PVE_MATCH_STATUS, resultForPlayer } = require('../../../../domain/entities/PveMatch');
 const { AppError, ERROR_CODES } = require('../../../../core/errors/AppError');
+const { makeFinishPveMatch } = require('./finishPveMatch');
+
+const GAME_OVER_STATUSES = [GAME_STATUS.CHECKMATE, GAME_STATUS.NO_LEGAL_MOVES];
 
 function isSquare(square, rows, cols) {
   return (
@@ -42,13 +48,18 @@ function normalizeMove(move) {
 }
 
 /**
- * @param {{ pveMatchRepository: object, clock?: () => Date }} deps
+ * @param {{ pveMatchRepository: object, clock?: () => Date, finishPveMatch?: Function }} deps
  */
-function makeApplyAndPersistMove({ pveMatchRepository, clock = () => new Date() }) {
+function makeApplyAndPersistMove({
+  pveMatchRepository,
+  clock = () => new Date(),
+  finishPveMatch = makeFinishPveMatch({ pveMatchRepository, clock }),
+}) {
   /**
    * @param {object} match - Trận hiện tại (đọc từ repository)
    * @param {{ side: 'red'|'black', actor: 'PLAYER'|'BOT', move: object }} input
-   * @returns {Promise<{ match: object, move: object }>} Trận sau nước đi và bản ghi nước đi
+   * @returns {Promise<{ match: object, move: object, gameStatus: object }>} Trận sau nước đi,
+   *   bản ghi nước đi và trạng thái ván của bên vừa tới lượt (ONGOING/CHECK/CHECKMATE/NO_LEGAL_MOVES)
    */
   return async function applyAndPersistMove(match, { side, actor, move }) {
     if (match.status !== PVE_MATCH_STATUS.PLAYING) {
@@ -97,6 +108,16 @@ function makeApplyAndPersistMove({ pveMatchRepository, clock = () => new Date() 
       );
     }
 
+    const savedMove = { ...moveRecord, createdAt: now };
+    const gameStatus = getGameStatus(nextBoard, nextSide);
+    if (GAME_OVER_STATUSES.includes(gameStatus.status)) {
+      const { match: finishedMatch } = await finishPveMatch(match.id, {
+        result: resultForPlayer(match.playerColor, gameStatus.loser),
+        endReason: gameStatus.status,
+      });
+      return { match: finishedMatch, move: savedMove, gameStatus };
+    }
+
     return {
       match: {
         ...match,
@@ -105,7 +126,8 @@ function makeApplyAndPersistMove({ pveMatchRepository, clock = () => new Date() 
         ply: match.ply + 1,
         updatedAt: now,
       },
-      move: { ...moveRecord, createdAt: now },
+      move: savedMove,
+      gameStatus,
     };
   };
 }
