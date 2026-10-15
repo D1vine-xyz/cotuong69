@@ -88,8 +88,13 @@ function querySqlite(text, params = []) {
     sqliteDb = new DatabaseSync(':memory:');
   }
 
-  // Chuyển đổi cú pháp $1, $2 của Postgres sang ? của SQLite nếu cần
-  let sqliteText = text.replace(/\$(\d+)/g, '?');
+  // Chuyển đổi cú pháp $1, $2 của Postgres sang ? của SQLite kèm map đúng tham số
+  const expandedParams = [];
+  let sqliteText = text.replace(/\$(\d+)/g, (match, num) => {
+    const index = parseInt(num, 10) - 1;
+    expandedParams.push(params[index]);
+    return '?';
+  });
   // Chuyển đổi một số cú pháp DDL đặc thù nếu có
   sqliteText = sqliteText
     .replace(/SERIAL PRIMARY KEY/gi, 'INTEGER PRIMARY KEY AUTOINCREMENT')
@@ -101,10 +106,10 @@ function querySqlite(text, params = []) {
     const stmt = sqliteDb.prepare(sqliteText);
 
     if (isSelect) {
-      const rows = stmt.all(...params);
+      const rows = stmt.all(...expandedParams);
       return { rows, rowCount: rows.length };
     } else {
-      const result = stmt.run(...params);
+      const result = stmt.run(...expandedParams);
       return {
         rows: [],
         rowCount: result.changes,
