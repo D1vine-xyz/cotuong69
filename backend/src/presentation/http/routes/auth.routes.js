@@ -1,13 +1,16 @@
 const { URL } = require('node:url');
 const RegisterUserUseCase = require('../../../application/useCases/registerUser');
+const LoginUserUseCase = require('../../../application/useCases/loginUser');
+const { authenticateRequest } = require('../middlewares/authMiddleware');
+const PgUserRepository = require('../../../infrastructure/database/repositories/PgUserRepository');
 
 function sendJson(response, statusCode, body) {
   response.writeHead(statusCode, {
     'Content-Type': 'application/json; charset=utf-8',
     'Cache-Control': 'no-store',
     'Access-Control-Allow-Origin': '*',
-    'Access-Control-Allow-Methods': 'POST, OPTIONS',
-    'Access-Control-Allow-Headers': 'Content-Type',
+    'Access-Control-Allow-Methods': 'GET, POST, OPTIONS',
+    'Access-Control-Allow-Headers': 'Content-Type, Authorization',
   });
   response.end(JSON.stringify(body));
 }
@@ -39,7 +42,12 @@ function parseJsonBody(request) {
   });
 }
 
-function createAuthHandler({ registerUseCase = new RegisterUserUseCase() } = {}) {
+function createAuthHandler({
+  registerUseCase = new RegisterUserUseCase(),
+  loginUseCase = new LoginUserUseCase(),
+  userRepository = new PgUserRepository(),
+  authMiddlewareOptions = {},
+} = {}) {
   return async (request, response) => {
     if (request.method === 'OPTIONS') {
       sendJson(response, 204, {});
@@ -54,6 +62,7 @@ function createAuthHandler({ registerUseCase = new RegisterUserUseCase() } = {})
       return;
     }
 
+    // 1. Đăng ký tài khoản (COT-571)
     if (pathname === '/api/auth/register') {
       if (request.method !== 'POST') {
         sendJson(response, 405, { error: 'Phương thức không được hỗ trợ. Chỉ chấp nhận POST.' });
@@ -77,19 +86,80 @@ function createAuthHandler({ registerUseCase = new RegisterUserUseCase() } = {})
         });
       } catch (err) {
         if (err.code === 'VALIDATION_ERROR') {
-          sendJson(response, 400, {
-            error: err.message,
-            errors: err.errors,
-          });
+          sendJson(response, 400, { error: err.message, errors: err.errors });
         } else if (err.code === 'USERNAME_EXISTS' || err.code === 'EMAIL_EXISTS') {
-          sendJson(response, 409, {
-            error: err.message,
-            code: err.code,
-          });
+          sendJson(response, 409, { error: err.message, code: err.code });
         } else {
-          console.error('Lỗi không xác định khi đăng ký:', err);
+          console.error('Lỗi khi đăng ký:', err);
           sendJson(response, 500, { error: 'Lỗi máy chủ nội bộ. Vui lòng thử lại sau.' });
         }
+      }
+      return;
+    }
+
+    // 2. Đăng nhập hệ thống (COT-572)
+    if (pathname === '/api/auth/login') {
+      if (request.method !== 'POST') {
+        sendJson(response, 405, { error: 'Phương thức không được hỗ trợ. Chỉ chấp nhận POST.' });
+        return;
+      }
+
+      let payload;
+      try {
+        payload = await parseJsonBody(request);
+      } catch (err) {
+        sendJson(response, 400, { error: err.message });
+        return;
+      }
+
+      try {
+        const result = await loginUseCase.execute(payload);
+        sendJson(response, 200, result);
+      } catch (err) {
+        if (err.code === 'VALIDATION_ERROR') {
+          sendJson(response, 400, { error: err.message });
+        } else if (err.code === 'INVALID_CREDENTIALS') {
+          sendJson(response, 401, { error: err.message, code: err.code });
+        } else if (err.code === 'ACCOUNT_INACTIVE') {
+          sendJson(response, 403, { error: err.message, code: err.code });
+        } else {
+          console.error('Lỗi khi đăng nhập:', err);
+          sendJson(response, 500, { error: 'Lỗi máy chủ nội bộ. Vui lòng thử lại sau.' });
+        }
+      }
+      return;
+    }
+
+    // 3. Lấy thông tin phiên hiện tại (Protected API - COT-572)
+    if (pathname === '/api/auth/me') {
+      if (request.method !== 'GET') {
+        sendJson(response, 405, { error: 'Phương thức không được hỗ trợ. Chỉ chấp nhận GET.' });
+        return;
+      }
+
+      try {
+        const decoded = authenticateRequest(request, authMiddlewareOptions);
+        const user = await userRepository.findById(decoded.id);
+        if (!user) {
+          sendJson(response, 404, { error: 'Người dùng không tồn tại.' });
+          return;
+        }
+        sendJson(response, 200, {
+          user: {
+            id: user.id,
+            username: user.username,
+            displayName: user.displayName,
+            email: user.email,
+            eloRating: user.eloRating,
+            avatarUrl: user.avatarUrl,
+            status: user.status,
+          },
+        });
+      } catch (err) {
+        sendJson(response, err.statusCode || 401, {
+          error: err.message,
+          code: err.code || 'UNAUTHORIZED',
+        });
       }
       return;
     }
