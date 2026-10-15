@@ -126,7 +126,7 @@ function Piece({ piece, orientation, selected, interactive, dragPoint }) {
 
   return (
     <g
-      className={`xiangqi-piece ${piece.color}${selected ? ' is-selected' : ''}${interactive ? ' is-interactive' : ''}`}
+      className={`xiangqi-piece ${piece.color}${selected ? ' is-selected' : ''}${interactive ? ' is-interactive' : ''}${dragPoint ? ' is-lifted' : ''}`}
       transform={`translate(${x} ${y})`}
       aria-label={`${piece.color === 'red' ? 'Đỏ' : 'Đen'} ${label} tại ${piece.position}`}
       aria-pressed={selected}
@@ -136,10 +136,12 @@ function Piece({ piece, orientation, selected, interactive, dragPoint }) {
     >
       <circle className="piece-shadow" cx="1.5" cy="4" r="35" />
       <circle className="piece-edge" r="33" />
+      <circle className="piece-side-rim" r="31.5" />
       <circle className="piece-bevel" r="30.5" />
       <circle className="piece-face" cy="-1" r="29" />
       <circle className="piece-inner-ring" cy="-1" r="23.5" />
       <path className="piece-glint" d="M -17 -20 A 27 27 0 0 1 17 -20" />
+      <ellipse className="piece-reflection" cx="-10" cy="-17" rx="8" ry="3.2" transform="rotate(-28 -10 -17)" />
       <text
         className={`piece-label piece-label-${piece.type}`}
         textAnchor="middle"
@@ -191,6 +193,8 @@ export default function XiangqiBoard({
   interactive = false,
   movePending = false,
   orientation = 'red',
+  checkedColor = null,
+  captureEffect = null,
   onMove = () => {},
 }) {
   const [selectedPieceId, setSelectedPieceId] = useState(null);
@@ -198,6 +202,22 @@ export default function XiangqiBoard({
   const dragRef = useRef(null);
   const suppressClickRef = useRef(false);
   const selectedPiece = pieces.find((piece) => piece.id === selectedPieceId);
+  const checkedGeneral = checkedColor
+    ? pieces.find((piece) => piece.type === 'general' && piece.color === checkedColor)
+    : null;
+  const checkedPosition = checkedGeneral && /^[a-i][0-9]$/i.test(checkedGeneral.position)
+    ? checkedGeneral.position
+    : null;
+  const checkedFile = checkedPosition ? FILES.indexOf(checkedPosition[0].toLowerCase()) : -1;
+  const checkedRank = checkedPosition ? Number(checkedPosition.slice(1)) : -1;
+  const checkedPoint = checkedFile >= 0 && checkedRank >= 0 && checkedRank <= 9
+    ? point(checkedFile, checkedRank, orientation)
+    : null;
+  const captureFile = captureEffect ? FILES.indexOf(captureEffect.position?.[0]?.toLowerCase()) : -1;
+  const captureRank = captureEffect ? Number(captureEffect.position?.slice(1)) : -1;
+  const capturePoint = captureFile >= 0 && captureRank >= 0 && captureRank <= 9
+    ? point(captureFile, captureRank, orientation)
+    : null;
   const coordinates = orientation === 'black' ? [...FILES].reverse() : [...FILES];
   const boardPositionSignature = pieces.map((piece) => `${piece.id}:${piece.position}`).join('|');
 
@@ -295,21 +315,38 @@ export default function XiangqiBoard({
       >
         <defs>
           <linearGradient id="board-wood" x1="0" y1="0" x2="1" y2="1">
-            <stop offset="0%" stopColor="#85572f" />
-            <stop offset="28%" stopColor="#c18b4c" />
-            <stop offset="54%" stopColor="#9a6634" />
-            <stop offset="78%" stopColor="#d0a064" />
-            <stop offset="100%" stopColor="#774b29" />
+            <stop offset="0%" stopColor="#644126" />
+            <stop offset="17%" stopColor="#bd8a51" />
+            <stop offset="40%" stopColor="#87552e" />
+            <stop offset="65%" stopColor="#d0a064" />
+            <stop offset="83%" stopColor="#94643a" />
+            <stop offset="100%" stopColor="#55351f" />
           </linearGradient>
+          <pattern id="wood-grain" width="180" height="112" patternUnits="userSpaceOnUse">
+            <path d="M -20 19 C 24 4 54 31 96 17 S 156 7 202 22 M -18 53 C 22 39 58 64 103 49 S 158 43 198 56 M -16 88 C 28 72 67 99 112 83 S 163 77 199 91" fill="none" stroke="#f1cf9a" strokeOpacity=".26" strokeWidth="1.4" />
+            <path d="M -20 34 C 24 20 54 46 96 32 S 156 22 202 37 M -18 70 C 22 56 58 81 103 66 S 158 60 198 73" fill="none" stroke="#4c2c19" strokeOpacity=".22" strokeWidth="1" />
+          </pattern>
           <linearGradient id="board-paper" x1="0" y1="0" x2="1" y2="1">
             <stop offset="0%" stopColor="#f6e9cc" />
             <stop offset="48%" stopColor="#efddb8" />
             <stop offset="100%" stopColor="#ead3a8" />
           </linearGradient>
-          <linearGradient id="piece-ivory" x1="0" y1="0" x2="0.8" y2="1">
-            <stop offset="0%" stopColor="#fff8e8" />
-            <stop offset="48%" stopColor="#f2e4c9" />
-            <stop offset="100%" stopColor="#ddc9a5" />
+          <radialGradient id="piece-ivory" cx=".29" cy=".2" r=".88">
+            <stop offset="0%" stopColor="#fffef5" />
+            <stop offset="43%" stopColor="#f3e5ca" />
+            <stop offset="78%" stopColor="#dfcaa3" />
+            <stop offset="100%" stopColor="#bca27b" />
+          </radialGradient>
+          <linearGradient id="piece-bronze" x1="0" y1="0" x2="0.85" y2="1">
+            <stop offset="0%" stopColor="#f6dba5" />
+            <stop offset="25%" stopColor="#a47543" />
+            <stop offset="52%" stopColor="#f1d29a" />
+            <stop offset="100%" stopColor="#62401f" />
+          </linearGradient>
+          <linearGradient id="piece-bevel" x1="0" y1="0" x2="0.8" y2="1">
+            <stop offset="0%" stopColor="#fff0cf" />
+            <stop offset="55%" stopColor="#cfb486" />
+            <stop offset="100%" stopColor="#8f7049" />
           </linearGradient>
           <linearGradient id="piece-red-ink" x1="0" y1="0" x2="0" y2="1">
             <stop offset="0%" stopColor="#c84d3f" />
@@ -329,6 +366,7 @@ export default function XiangqiBoard({
           </filter>
         </defs>
         <rect className="board-wood-mat" x="8" y="4" width="884" height="992" rx="17" fill="url(#board-wood)" />
+        <rect className="board-wood-grain" x="9" y="5" width="882" height="990" rx="16" fill="url(#wood-grain)" />
         <rect className="board-wood-inset" x="19" y="15" width="862" height="970" rx="12" />
         <rect className="board-paper" x="22" y="17" width="856" height="966" rx="9" fill="url(#board-paper)" />
         <rect className="board-border" x="29" y="24" width="842" height="952" rx="5" />
@@ -346,6 +384,53 @@ export default function XiangqiBoard({
             return <text key={`rank-label-${rank}`} x="40" y={y + 4} textAnchor="middle">{rank}</text>;
           })}
         </g>
+        {checkedPoint && (
+          <g className="check-highlight-layer" aria-hidden="true">
+            <circle cx={checkedPoint.x} cy={checkedPoint.y} r="39" />
+          </g>
+        )}
+        {capturePoint && (
+          <g key={captureEffect.key} className="capture-effect-layer" aria-hidden="true">
+            {captureEffect.capturedPiece && (
+              <g transform={`translate(${capturePoint.x} ${capturePoint.y})`}>
+                <g className={`captured-piece-exit ${captureEffect.capturedPiece.color}`}>
+                  <circle className="captured-piece-shadow" cx="2" cy="5" r="34" />
+                  <circle className="captured-piece-rim" r="32" />
+                  <circle className="captured-piece-face" cy="-1" r="28" />
+                  <text
+                    className={`captured-piece-label ${captureEffect.capturedPiece.color}`}
+                    textAnchor="middle"
+                    dominantBaseline="central"
+                    textLength={PIECE_LABELS[captureEffect.capturedPiece.type].length > 3 ? 42 : undefined}
+                    lengthAdjust="spacingAndGlyphs"
+                  >
+                    {PIECE_LABELS[captureEffect.capturedPiece.type]}
+                  </text>
+                </g>
+              </g>
+            )}
+            <circle className="capture-flash" cx={capturePoint.x} cy={capturePoint.y} r="12" />
+            <circle className="capture-ring" cx={capturePoint.x} cy={capturePoint.y} r="18" />
+            <path
+              className="capture-sparks"
+              d={`M ${capturePoint.x} ${capturePoint.y - 24} v -11
+                M ${capturePoint.x + 17} ${capturePoint.y - 17} l 8 -8
+                M ${capturePoint.x + 24} ${capturePoint.y} h 11
+                M ${capturePoint.x + 17} ${capturePoint.y + 17} l 8 8
+                M ${capturePoint.x} ${capturePoint.y + 24} v 11
+                M ${capturePoint.x - 17} ${capturePoint.y + 17} l -8 8
+                M ${capturePoint.x - 24} ${capturePoint.y} h -11
+                M ${capturePoint.x - 17} ${capturePoint.y - 17} l -8 -8`}
+            />
+          </g>
+        )}
+        {capturePoint && captureEffect.capturedPiece && (
+          <g className="captured-piece-trail" aria-hidden="true">
+            <circle cx={capturePoint.x - 18} cy={capturePoint.y + 5} r="4" />
+            <circle cx={capturePoint.x + 20} cy={capturePoint.y - 7} r="3" />
+            <circle cx={capturePoint.x + 5} cy={capturePoint.y + 21} r="2.5" />
+          </g>
+        )}
         <g className="pieces-layer">
           {pieces.map((piece) => (
             <Piece

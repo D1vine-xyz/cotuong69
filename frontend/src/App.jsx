@@ -1,4 +1,4 @@
-import { useEffect } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import XiangqiBoard from './presentation/components/board/XiangqiBoard';
 import { useMatch } from './application/hooks/useMatch';
 import './styles.css';
@@ -35,6 +35,47 @@ function PlayerCard({ player, color, active, time }) {
   );
 }
 
+const CAPTURED_PIECE_NAMES = {
+  general: 'Tướng',
+  advisor: 'Sĩ',
+  elephant: 'Tượng',
+  horse: 'Mã',
+  chariot: 'Xe',
+  cannon: 'Pháo',
+  soldier: 'Chốt',
+};
+
+const CAPTURED_PIECE_MARKS = {
+  general: 'T',
+  advisor: 'S',
+  elephant: 'T',
+  horse: 'M',
+  chariot: 'X',
+  cannon: 'P',
+  soldier: 'C',
+};
+
+function CapturedTray({ color, pieces }) {
+  return (
+    <div className={`captured-tray captured-tray-${color}`} aria-label={`Quân ${color === 'red' ? 'Đỏ' : 'Đen'} đã bị bắt`}>
+      <span className="captured-tray-label">{color === 'red' ? 'ĐỎ MẤT' : 'ĐEN MẤT'}</span>
+      <div className="captured-tray-pieces">
+        {pieces.length ? pieces.map((piece, index) => (
+          <span
+            key={`${piece.id}-${index}`}
+            className={`captured-token ${piece.color}`}
+            title={`${CAPTURED_PIECE_NAMES[piece.type]} ${color === 'red' ? 'Đỏ' : 'Đen'} đã bị bắt`}
+            aria-label={`${CAPTURED_PIECE_NAMES[piece.type]} đã bị bắt`}
+          >
+            {CAPTURED_PIECE_MARKS[piece.type]}
+          </span>
+        )) : <span className="captured-tray-empty">Chưa mất quân</span>}
+      </div>
+      <strong>{pieces.length}</strong>
+    </div>
+  );
+}
+
 function playMoveSound(captured) {
   const AudioContextType = window.AudioContext || window.webkitAudioContext;
   if (!AudioContextType) return;
@@ -56,6 +97,13 @@ function playMoveSound(captured) {
 
 function App() {
   const matchId = new URLSearchParams(window.location.search).get('matchId');
+  const [soundEnabled, setSoundEnabled] = useState(true);
+  const [perspectiveEnabled, setPerspectiveEnabled] = useState(false);
+  const [captureEffect, setCaptureEffect] = useState(null);
+  const [capturedPieces, setCapturedPieces] = useState({ red: [], black: [] });
+  const previousMoveRef = useRef(undefined);
+  const previousBoardRef = useRef(null);
+  const captureEffectTimeoutRef = useRef(null);
   const {
     match,
     loading,
@@ -65,7 +113,6 @@ function App() {
     connected,
     movePending,
     moveError,
-    moveResult,
     sendMove,
     clearMoveError,
   } = useMatch(matchId);
@@ -75,9 +122,42 @@ function App() {
     return () => document.body.classList.remove('match-view');
   }, [matchId]);
 
+  const lastMove = match?.lastMove;
+  const lastMoveKey = lastMove
+    ? `${lastMove.color}:${lastMove.from}:${lastMove.to}:${Boolean(lastMove.captured)}`
+    : null;
+
   useEffect(() => {
-    if (moveResult) playMoveSound(moveResult.captured);
-  }, [moveResult]);
+    if (!match) return;
+    if (previousMoveRef.current === undefined) {
+      previousMoveRef.current = lastMoveKey;
+      previousBoardRef.current = match.board;
+      return;
+    }
+    if (lastMoveKey && previousMoveRef.current !== lastMoveKey) {
+      if (soundEnabled) playMoveSound(Boolean(lastMove.captured));
+      if (lastMove.captured) {
+        const capturedPiece = previousBoardRef.current?.find(
+          (piece) => piece.position === lastMove.to && piece.color !== lastMove.color,
+        );
+        setCaptureEffect({ key: lastMoveKey, position: lastMove.to, capturedPiece });
+        if (capturedPiece) {
+          setCapturedPieces((current) => ({
+            ...current,
+            [capturedPiece.color]: [...current[capturedPiece.color], capturedPiece],
+          }));
+        }
+        window.clearTimeout(captureEffectTimeoutRef.current);
+        captureEffectTimeoutRef.current = window.setTimeout(() => {
+          setCaptureEffect(null);
+        }, 750);
+      }
+    }
+    previousMoveRef.current = lastMoveKey;
+    previousBoardRef.current = match.board;
+  }, [lastMove, lastMoveKey, match, soundEnabled]);
+
+  useEffect(() => () => window.clearTimeout(captureEffectTimeoutRef.current), []);
 
   useEffect(() => {
     if (!moveError) return undefined;
@@ -107,6 +187,11 @@ function App() {
   const countdown = isStarting ? match.countdownSeconds : null;
   const currentTurn = isStarting ? null : match.currentTurn;
   const activePlayer = currentTurn === 'red' || currentTurn === 'black' ? currentTurn : null;
+  const checkedColor = match.checkedColor ||
+    (match.check === true || match.inCheck === true ? match.currentTurn : null);
+  const checkedGeneral = checkedColor
+    ? match.board.find((piece) => piece.type === 'general' && piece.color === checkedColor)
+    : null;
 
   return (
     <main className="game-page">
@@ -124,7 +209,33 @@ function App() {
         <div className="topbar-right">
           <span className="demo-indicator"><i /> BẢN XEM TRƯỚC</span>
           <span className="viewer-pill"><span aria-hidden="true">◉</span> {readOnly ? 'Khán giả' : `Quân ${color === 'red' ? 'Đỏ' : 'Đen'}`}</span>
-          <button className="icon-button" type="button" aria-label="Tùy chọn">•••</button>
+          <details className="match-settings">
+            <summary className="icon-button" aria-label="Cài đặt trận đấu" title="Cài đặt trận đấu">•••</summary>
+            <div className="match-settings-panel">
+              <label>
+                <input
+                  type="checkbox"
+                  checked={soundEnabled}
+                  onChange={(event) => setSoundEnabled(event.target.checked)}
+                />
+                <span>
+                  <strong>Âm thanh</strong>
+                  <small>{soundEnabled ? 'Bật âm đi và ăn quân' : 'Đã tắt âm thanh'}</small>
+                </span>
+              </label>
+              <label>
+                <input
+                  type="checkbox"
+                  checked={perspectiveEnabled}
+                  onChange={(event) => setPerspectiveEnabled(event.target.checked)}
+                />
+                <span>
+                  <strong>Góc nhìn phối cảnh</strong>
+                  <small>{perspectiveEnabled ? 'Đang nghiêng nhẹ bàn cờ' : 'Đang nhìn thẳng'}</small>
+                </span>
+              </label>
+            </div>
+          </details>
         </div>
       </header>
 
@@ -142,7 +253,15 @@ function App() {
             </div>
           </div>
 
-          <div className="board-shell">
+          {checkedColor && (
+            <div className={`check-alert check-alert-${checkedColor}`} role="alert" aria-live="assertive">
+              <span aria-hidden="true">!</span>
+              <strong>Chiếu Tướng!</strong>
+              <span>Tướng {checkedColor === 'red' ? 'Đỏ' : 'Đen'} đang bị chiếu.</span>
+            </div>
+          )}
+
+          <div className={`board-shell ${perspectiveEnabled ? 'perspective-enabled' : ''}`}>
             <PlayerCard
               player={match.players.black}
               color="black"
@@ -157,6 +276,8 @@ function App() {
               interactive={!readOnly && !isStarting && currentTurn === color && !movePending}
               movePending={movePending}
               orientation={color === 'black' ? 'black' : 'red'}
+              checkedColor={checkedGeneral ? checkedColor : null}
+              captureEffect={captureEffect}
               onMove={sendMove}
             />
             <PlayerCard
@@ -165,6 +286,10 @@ function App() {
               active={activePlayer === 'red'}
               time={match.clocks.red}
             />
+            <div className="captured-trays" aria-live="polite">
+              <CapturedTray color="black" pieces={capturedPieces.black} />
+              <CapturedTray color="red" pieces={capturedPieces.red} />
+            </div>
           </div>
 
           {readOnly ? (

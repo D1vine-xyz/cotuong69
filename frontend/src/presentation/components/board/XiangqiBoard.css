@@ -1,13 +1,35 @@
 .xiangqi-board-frame {
   --board-ink: #79502b;
   position: relative;
+  z-index: 0;
   width: min(100%, 600px);
   margin: 0 auto;
   padding: 20px 0 21px;
-  border: 1px solid rgba(255, 255, 255, .07);
-  border-radius: 10px;
-  background: linear-gradient(145deg, #202526, #111617);
-  box-shadow: 0 16px 40px rgba(0, 0, 0, .32), inset 0 1px rgba(255,255,255,.035);
+  border: 1px solid rgba(255, 226, 174, .13);
+  border-radius: 11px;
+  background: linear-gradient(145deg, #242726, #121616);
+  box-shadow: 0 25px 42px rgba(0, 0, 0, .48), 0 6px 12px rgba(0, 0, 0, .3), inset 0 1px rgba(255,255,255,.06);
+  transform-origin: center 58%;
+  transition: transform .35s ease, box-shadow .35s ease;
+}
+
+.xiangqi-board-frame::before {
+  position: absolute;
+  z-index: -1;
+  right: 4%;
+  bottom: 5px;
+  left: 4%;
+  height: 17px;
+  border-radius: 50%;
+  background: rgba(0, 0, 0, .65);
+  content: "";
+  filter: blur(11px);
+  transform: translateY(13px);
+}
+
+.perspective-enabled .xiangqi-board-frame {
+  transform: perspective(1250px) rotateX(2.8deg);
+  box-shadow: 0 30px 52px rgba(0, 0, 0, .54), 0 8px 14px rgba(0, 0, 0, .36), inset 0 1px rgba(255,255,255,.06);
 }
 
 .xiangqi-board {
@@ -26,14 +48,20 @@
 
 .board-wood-mat {
   stroke: #e2b678;
-  stroke-width: 2;
-  filter: drop-shadow(0 8px 12px rgba(54, 31, 12, .28));
+  stroke-width: 3;
+  filter: drop-shadow(0 11px 14px rgba(34, 18, 8, .48));
+}
+
+.board-wood-grain {
+  opacity: .38;
+  pointer-events: none;
 }
 
 .board-wood-inset {
   fill: none;
-  stroke: rgba(79, 44, 20, .7);
-  stroke-width: 1.5;
+  stroke: rgba(58, 34, 17, .82);
+  stroke-width: 2.4;
+  filter: drop-shadow(0 1px rgba(255, 224, 172, .48));
 }
 
 .board-border {
@@ -44,10 +72,10 @@
 
 .board-lines {
   fill: none;
-  stroke: #80552f;
-  stroke-width: 2.4;
+  stroke: #714923;
+  stroke-width: 2.6;
   stroke-linecap: square;
-  opacity: .91;
+  opacity: .94;
 }
 
 .board-details {
@@ -105,12 +133,20 @@
   cursor: default;
   transform-box: fill-box;
   transform-origin: center;
-  transition: filter .18s ease, transform .2s cubic-bezier(.2,.75,.25,1);
+  transition: filter .2s ease, transform .38s cubic-bezier(.2,.75,.25,1);
 }
 
-.xiangqi-piece:hover { filter: brightness(1.06) drop-shadow(0 3px 3px rgba(56, 31, 14, .26)); }
+.xiangqi-piece:hover { filter: brightness(1.06) drop-shadow(0 5px 4px rgba(40, 23, 12, .34)); }
 .xiangqi-piece.is-interactive { cursor: grab; }
 .xiangqi-piece.is-interactive:active { cursor: grabbing; }
+.xiangqi-piece.is-lifted {
+  filter: drop-shadow(0 12px 8px rgba(25, 16, 10, .5)) brightness(1.08);
+  transition: none;
+}
+.xiangqi-piece.is-lifted .piece-shadow {
+  fill: rgba(38, 23, 11, .52);
+  filter: blur(2px);
+}
 .xiangqi-piece.is-selected {
   filter: drop-shadow(0 0 8px rgba(255, 211, 101, .95));
 }
@@ -122,26 +158,122 @@
   stroke-width: 3;
 }
 
+.check-highlight-layer {
+  pointer-events: none;
+}
+
+.check-highlight-layer circle {
+  fill: rgba(205, 54, 46, .2);
+  stroke: #d94c42;
+  stroke-width: 5;
+  filter: drop-shadow(0 0 8px rgba(220, 63, 52, .7));
+  animation: check-pulse 1.2s ease-in-out infinite alternate;
+}
+
+.capture-effect-layer { pointer-events: none; }
+
+.captured-piece-exit {
+  transform-box: fill-box;
+  transform-origin: center;
+  animation: captured-piece-exit .68s ease-in both;
+}
+
+.captured-piece-shadow { fill: rgba(38, 23, 11, .5); }
+.captured-piece-rim { fill: url(#piece-bronze); stroke: #4f351d; stroke-width: 2; }
+.captured-piece-face { fill: url(#piece-ivory); stroke: #8f6d42; stroke-width: 2; }
+.captured-piece-label { font: 700 16px Arial, sans-serif; }
+.captured-piece-label.red { fill: #9b3029; }
+.captured-piece-label.black { fill: #30302d; }
+
+.captured-piece-trail {
+  fill: #f0bd69;
+  opacity: 0;
+  filter: drop-shadow(0 0 5px rgba(255, 198, 100, .8));
+  animation: captured-piece-trail .56s ease-out .08s both;
+}
+
+@keyframes captured-piece-exit {
+  0% { opacity: 1; transform: scale(1); filter: blur(0); }
+  35% { opacity: .95; transform: scale(.9); }
+  100% { opacity: 0; transform: scale(.28); filter: blur(4px); }
+}
+
+@keyframes captured-piece-trail {
+  0% { opacity: .95; }
+  100% { opacity: 0; }
+}
+
+.capture-flash {
+  fill: rgba(255, 237, 181, .86);
+  filter: drop-shadow(0 0 12px rgba(255, 215, 119, .95));
+  animation: capture-flash .48s ease-out both;
+}
+
+.capture-ring {
+  fill: none;
+  stroke: #ffe19a;
+  stroke-width: 5;
+  transform-box: fill-box;
+  transform-origin: center;
+  animation: capture-ring .62s cubic-bezier(.1,.65,.3,1) both;
+}
+
+.capture-sparks {
+  fill: none;
+  stroke: #f4bd65;
+  stroke-linecap: round;
+  stroke-width: 4;
+  animation: capture-sparks .58s ease-out both;
+}
+
+@keyframes capture-flash {
+  0% { opacity: 0; transform: scale(.25); }
+  22% { opacity: 1; transform: scale(1.45); }
+  100% { opacity: 0; transform: scale(.7); }
+}
+
+@keyframes capture-ring {
+  0% { opacity: .95; transform: scale(.45); }
+  100% { opacity: 0; transform: scale(2.8); }
+}
+
+@keyframes capture-sparks {
+  0% { opacity: 1; }
+  100% { opacity: 0; stroke-width: 1; }
+}
+
+@keyframes check-pulse {
+  from { opacity: .72; }
+  to { opacity: 1; }
+}
+
 .piece-shadow {
-  fill: rgba(52, 32, 17, .3);
+  fill: rgba(41, 24, 12, .46);
+  filter: blur(1.2px);
 }
 
 .piece-edge {
-  fill: #684a2d;
-  stroke: #f0d8ad;
-  stroke-width: 1.8;
+  fill: #49301a;
+  stroke: #f1d5a5;
+  stroke-width: 2.2;
+}
+
+.piece-side-rim {
+  fill: none;
+  stroke: url(#piece-bronze);
+  stroke-width: 2;
 }
 
 .piece-bevel {
-  fill: #d1b78a;
-  stroke: rgba(92, 60, 32, .9);
-  stroke-width: 1.4;
+  fill: url(#piece-bevel);
+  stroke: rgba(76, 48, 25, .88);
+  stroke-width: 1.7;
 }
 
 .piece-face {
   fill: url(#piece-ivory);
-  stroke-width: 1.9;
-  filter: drop-shadow(0 -1.5px rgba(255, 255, 255, .85));
+  stroke-width: 2.2;
+  filter: drop-shadow(0 -2px rgba(255, 255, 255, .92)) drop-shadow(0 2px rgba(87, 58, 30, .2));
 }
 
 .xiangqi-piece.red .piece-face { stroke: #a74335; }
@@ -158,9 +290,14 @@
 
 .piece-glint {
   fill: none;
-  stroke: rgba(255, 255, 255, .92);
+  stroke: rgba(255, 255, 255, .84);
   stroke-linecap: round;
-  stroke-width: 2;
+  stroke-width: 2.4;
+}
+
+.piece-reflection {
+  fill: rgba(255, 255, 255, .44);
+  filter: blur(1px);
 }
 
 .piece-label {
@@ -180,6 +317,9 @@
 
 .xiangqi-piece.red .piece-label { fill: url(#piece-red-ink); }
 .xiangqi-piece.black .piece-label { fill: url(#piece-black-ink); }
+
+.xiangqi-piece.red .piece-inner-ring { stroke: #be6553; }
+.xiangqi-piece.black .piece-inner-ring { stroke: #5b5c56; }
 
 .board-readonly-tag {
   position: absolute;
@@ -242,5 +382,17 @@
 }
 
 @media (prefers-reduced-motion: reduce) {
-  .countdown-number, .xiangqi-piece { animation: none; transition: none; }
+  .countdown-number, .xiangqi-piece, .check-highlight-layer circle,
+  .capture-flash, .capture-ring, .capture-sparks, .captured-piece-exit {
+    animation: none;
+    transition: none;
+  }
+  .captured-piece-exit { opacity: 0; }
+  .captured-piece-trail { animation: none; }
+}
+
+@media (max-width: 700px) {
+  .perspective-enabled .xiangqi-board-frame {
+    transform: perspective(1250px) rotateX(1.2deg);
+  }
 }
