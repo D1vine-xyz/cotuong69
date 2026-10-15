@@ -4,6 +4,9 @@ const { WebSocketServer } = require('ws');
 const { applyMatchMove, createCot615Match, getPublicMatchState } = require('./domain/entities/cot615Match');
 const { createMatchesHandler } = require('./presentation/http/routes/matches.routes');
 const { createAuthHandler } = require('./presentation/http/routes/auth.routes');
+const { createUserHandler } = require('./presentation/http/routes/user.routes');
+const fs = require('node:fs');
+const path = require('node:path');
 
 function createServer(options = {}) {
   let match = options.match || null;
@@ -19,6 +22,7 @@ function createServer(options = {}) {
     now,
   });
   const authHandler = options.authHandler || createAuthHandler(options.authOptions);
+  const userHandler = options.userHandler || createUserHandler(options.userOptions);
 
   const httpHandler = (req, res) => {
     let pathname = '';
@@ -32,6 +36,23 @@ function createServer(options = {}) {
 
     if (pathname.startsWith('/api/auth')) {
       return authHandler(req, res);
+    }
+    if (pathname.startsWith('/api/users')) {
+      return userHandler(req, res);
+    }
+    if (pathname.startsWith('/uploads/')) {
+      const filePath = path.resolve(__dirname, '..', pathname.replace(/^\//, ''));
+      if (fs.existsSync(filePath)) {
+        const ext = path.extname(filePath).toLowerCase();
+        const mimeMap = { '.jpg': 'image/jpeg', '.jpeg': 'image/jpeg', '.png': 'image/png', '.webp': 'image/webp' };
+        res.writeHead(200, { 'Content-Type': mimeMap[ext] || 'application/octet-stream' });
+        fs.createReadStream(filePath).pipe(res);
+        return;
+      } else {
+        res.writeHead(404, { 'Content-Type': 'application/json' });
+        res.end(JSON.stringify({ error: 'File not found' }));
+        return;
+      }
     }
     return matchesHandler(req, res);
   };
