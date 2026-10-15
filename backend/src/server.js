@@ -1,125 +1,20 @@
 const http = require('node:http');
-const { URL } = require('node:url');
-const { WebSocketServer } = require('ws');
-const { applyMatchMove, createCot615Match, getPublicMatchState } = require('./domain/entities/cot615Match');
+const { createCot615Match } = require('./domain/entities/cot615Match');
 const { createMatchesHandler } = require('./presentation/http/routes/matches.routes');
 
 function createServer(options = {}) {
   let match = options.match || null;
-  const now = options.now || Date.now;
-  const clients = new Map();
-  const webSockets = new WebSocketServer({ noServer: true });
-  const getCurrentMatch = () => {
-    if (!match) match = createCot615Match(now());
-    return match;
-  };
   const handler = createMatchesHandler({
-    getMatch: getCurrentMatch,
-    now,
-  });
-  const server = http.createServer(handler);
-
-  function send(client, message) {
-    if (client.readyState === 1) client.send(JSON.stringify(message));
-  }
-
-  function broadcastState() {
-    if (!match) return;
-    const state = getPublicMatchState(match, now());
-    for (const [client, color] of clients) {
-      send(client, { type: 'state', state, color, readOnly: color === null });
-    }
-  }
-
-  function assignColor() {
-    const occupied = new Set([...clients.values()].filter(Boolean));
-    return ['red', 'black'].find((color) => !occupied.has(color)) || null;
-  }
-
-  function handleMessage(client, rawMessage) {
-    let message;
-    try {
-      message = JSON.parse(rawMessage.toString());
-    } catch {
-      send(client, { type: 'error', error: 'Dữ liệu gửi lên không hợp lệ.' });
-      return;
-    }
-
-    if (message?.type !== 'move' || typeof message.from !== 'string' || typeof message.to !== 'string') {
-      send(client, { type: 'error', error: 'Yêu cầu nước đi không hợp lệ.' });
-      return;
-    }
-
-    const color = clients.get(client);
-    if (!color) {
-      send(client, { type: 'moveResult', accepted: false, error: 'Khán giả không thể đi quân.' });
-      return;
-    }
-
-    const result = applyMatchMove(getCurrentMatch(), color, message.from, message.to, now());
-    if (result.accepted) broadcastState();
-    send(client, { type: 'moveResult', ...result });
-  }
-
-  server.on('upgrade', (request, socket, head) => {
-    let pathname;
-    try {
-      pathname = new URL(request.url, 'http://localhost').pathname;
-    } catch {
-      socket.destroy();
-      return;
-    }
-
-    const matchRoute = pathname.match(/^\/api\/matches\/([^/]+)\/ws$/);
-    if (!matchRoute) {
-      socket.destroy();
-      return;
-    }
-
-    let requestedMatchId;
-    try {
-      requestedMatchId = decodeURIComponent(matchRoute[1]);
-    } catch {
-      socket.destroy();
-      return;
-    }
-    if (requestedMatchId !== getCurrentMatch().id) {
-      socket.destroy();
-      return;
-    }
-
-    webSockets.handleUpgrade(request, socket, head, (client) => {
-      webSockets.emit('connection', client);
-    });
+    getMatch: () => {
+      if (!match) {
+        match = createCot615Match(options.now ? options.now() : Date.now());
+      }
+      return match;
+    },
+    now: options.now || Date.now,
   });
 
-  webSockets.on('connection', (client) => {
-    const color = assignColor();
-    clients.set(client, color);
-    send(client, {
-      type: 'welcome',
-      color,
-      readOnly: color === null,
-      state: getPublicMatchState(getCurrentMatch(), now()),
-    });
-    broadcastState();
-    client.on('message', (message) => handleMessage(client, message));
-    client.on('close', () => {
-      clients.delete(client);
-      broadcastState();
-    });
-  });
-
-  const clockTimer = setInterval(broadcastState, 1000);
-  clockTimer.unref();
-
-  server.on('close', () => {
-    clearInterval(clockTimer);
-    for (const client of webSockets.clients) client.close();
-    webSockets.close();
-  });
-
-  return server;
+  return http.createServer(handler);
 }
 
 if (require.main === module) {
@@ -128,7 +23,7 @@ if (require.main === module) {
 
   server.listen(port, '127.0.0.1', () => {
     console.log(`Match API listening on http://localhost:${port}`);
-    console.log('Development match: GET /api/matches/COT-615; WebSocket /api/matches/COT-615/ws');
+    console.log('Read-only development match: GET /api/matches/COT-615');
   });
 
   for (const signal of ['SIGINT', 'SIGTERM']) {

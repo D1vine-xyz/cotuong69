@@ -56,10 +56,10 @@ frontend/src/
 
 ---
 
-## Bàn cờ Match COT-615 / COT-616
+## Match view cho bàn cờ COT-615
 
-`presentation/components/board/XiangqiBoard` nhận `pieces` dưới dạng mảng quân `{ id, color, type, position }`, trong đó `color` là `red` hoặc `black`, `type` là `general`, `advisor`, `elephant`, `horse`, `chariot`, `cannon` hoặc `soldier`, và `position` là tọa độ như `e0`. Khi máy chủ cấp vai trò người chơi và đang tới lượt, component hỗ trợ click chọn-đích và kéo-thả qua Pointer Events (chuột/cảm ứng). Chỉ quân được chọn được highlight; UI không render danh sách, marker hay vòng tròn gợi ý nước đi. Góc nhìn quân Đen đảo ánh xạ hiển thị, còn tọa độ gửi đi vẫn dùng hệ chuẩn `a0`–`i9`.
+`presentation/components/board/XiangqiBoard` nhận `pieces` dưới dạng mảng quân `{ id, color, type, position }`, trong đó `color` là `red` hoặc `black`, `type` là `general`, `advisor`, `elephant`, `horse`, `chariot`, `cannon` hoặc `soldier`, và `position` là tọa độ như `e0`. Bàn cờ chỉ hiển thị trạng thái, không gắn thao tác kéo/thả hay đi quân.
 
-Màn hình tải snapshot qua `GET /api/matches/:matchId` và nhận trạng thái/đồng hồ/nước đi qua WebSocket `ws(s)://<host>/api/matches/:matchId/ws`. Client chỉ gửi `{ type: "move", from, to }`; server kiểm tra lượt, quyền phe và luật trước khi phát trạng thái mới. Trong lúc chờ phản hồi client khóa gửi nước đi tiếp. Lỗi không cập nhật bàn cờ; thông báo lỗi được hiển thị. Nước đi được server xác nhận phát âm thanh bước/ăn quân.
+Màn hình tải dữ liệu qua `application/hooks/useMatch` và `infrastructure/api/matchApi` từ `GET /api/matches/:matchId` (mặc định `COT-615`, có thể chọn bằng query `?matchId=...`). Dữ liệu được làm mới mỗi giây; countdown và đồng hồ là giá trị do server tính từ thời điểm phân bên/bắt đầu. Frontend không cung cấp thao tác cập nhật trận; endpoint hiện tại chỉ đọc để hỗ trợ chế độ khán giả.
 
-Backend hiện cung cấp Match mẫu trong bộ nhớ cho `COT-615`; trạng thái được khởi tạo lại khi tiến trình backend khởi động. Để thử nghiệm, hai kết nối WebSocket đầu tiên được cấp lần lượt phe Đỏ và Đen, các kết nối khác là khán giả. Đây **không phải xác thực danh tính**; không dùng cơ chế cấp phe mẫu này cho production. Trận mẫu chưa nối vào room lifecycle hoặc database. Thay thế cơ chế này bằng vai trò từ phiên đăng nhập/phòng thật trước khi triển khai production.
+Backend hiện cung cấp Match mẫu trong bộ nhớ cho `COT-615`; trạng thái được khởi tạo lại khi tiến trình backend khởi động và chưa nối vào luồng phòng, xác thực người chơi, cơ sở dữ liệu trận đấu hoặc WebSocket. Đây là adapter end-to-end để phát triển/giao diện COT-615, chưa phải hệ thống trận đấu production. Khi room/game backend thực tế sẵn sàng, thay nguồn khởi tạo Match ở backend để trả cùng DTO, rồi giữ nguyên giao diện đọc Match.
