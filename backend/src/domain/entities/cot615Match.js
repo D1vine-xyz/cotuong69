@@ -1,5 +1,3 @@
-const { getLegalMoveError, hasLegalMove, isInCheck } = require('./xiangqiRules');
-
 const backRank = [
   ['chariot', 'a'],
   ['horse', 'b'],
@@ -50,10 +48,6 @@ function createCot615Match(startedAt = Date.now()) {
     moveNumber: 1,
     viewerCount: 1,
     initialClockSeconds: 120,
-    remainingClocks: { red: 120, black: 120 },
-    turnStartedAt: startedAt + 3000,
-    winner: null,
-    lastMove: null,
     players: {
       red: { name: 'Nguyễn Nhật Trường', rating: 1240 },
       black: { name: 'Đối thủ', rating: 1286 },
@@ -68,72 +62,28 @@ function createCot615Match(startedAt = Date.now()) {
 function getPublicMatchState(match, now = Date.now()) {
   const startsAt = Date.parse(match.startsAt);
   const remainingCountdown = Math.max(0, Math.ceil((startsAt - now) / 1000));
-  const elapsedSeconds = Math.max(0, Math.floor((now - match.turnStartedAt) / 1000));
+  const elapsedSeconds = Math.max(0, Math.floor((now - startsAt) / 1000));
   const isActive = remainingCountdown === 0;
-  const activePlayer = isActive && match.status !== 'completed' ? match.currentTurn : null;
-  const clocks = { ...match.remainingClocks };
-  if (activePlayer) {
-    clocks[activePlayer] = Math.max(0, clocks[activePlayer] - elapsedSeconds);
-  }
+  const activePlayer = isActive ? match.currentTurn : null;
 
   return {
     id: match.id,
     roomName: match.roomName,
     matchCode: match.matchCode,
     title: match.title,
-    status: match.status === 'completed' ? 'completed' : isActive ? 'active' : 'starting',
+    status: isActive ? 'active' : 'starting',
     countdownSeconds: isActive ? null : remainingCountdown,
     currentTurn: match.currentTurn,
     moveNumber: match.moveNumber,
     viewerCount: match.viewerCount,
     timeControlSeconds: match.initialClockSeconds,
-    clocks,
+    clocks: {
+      red: Math.max(0, match.initialClockSeconds - (activePlayer === 'red' ? elapsedSeconds : 0)),
+      black: Math.max(0, match.initialClockSeconds - (activePlayer === 'black' ? elapsedSeconds : 0)),
+    },
     players: match.players,
     board: match.board,
-    winner: match.winner,
-    lastMove: match.lastMove,
   };
 }
 
-function applyMatchMove(match, color, from, to, now = Date.now()) {
-  if (match.status === 'completed' || now < Date.parse(match.startsAt)) {
-    return { accepted: false, error: 'Trận đấu chưa bắt đầu.' };
-  }
-  if (color !== match.currentTurn) {
-    return { accepted: false, error: 'Chưa tới lượt của bạn.' };
-  }
-
-  const elapsedSeconds = Math.max(0, Math.floor((now - match.turnStartedAt) / 1000));
-  const remaining = Math.max(0, match.remainingClocks[color] - elapsedSeconds);
-  if (remaining === 0) {
-    return { accepted: false, error: 'Đồng hồ của bạn đã hết giờ.' };
-  }
-
-  const error = getLegalMoveError(match.board, color, from, to);
-  if (error) return { accepted: false, error };
-
-  const capturedPiece = match.board.find((piece) => piece.position === to);
-  const movingPiece = match.board.find((piece) => piece.position === from);
-  match.board = match.board
-    .filter((piece) => piece.position !== to && piece.id !== movingPiece.id)
-    .concat({ ...movingPiece, position: to });
-  match.remainingClocks[color] = remaining;
-  match.status = 'active';
-  match.currentTurn = color === 'red' ? 'black' : 'red';
-  match.turnStartedAt = now;
-  match.lastMove = { from, to, color, captured: Boolean(capturedPiece) };
-  if (color === 'black') match.moveNumber += 1;
-
-  if (!hasLegalMove(match.board, match.currentTurn)) {
-    match.status = 'completed';
-    match.winner = color;
-  }
-
-  return {
-    accepted: true,
-    captured: Boolean(capturedPiece),
-    check: isInCheck(match.board, match.currentTurn),
-  };
-}
-
-module.exports = { applyMatchMove, createCot615Match, getPublicMatchState };
+module.exports = { createCot615Match, getPublicMatchState };

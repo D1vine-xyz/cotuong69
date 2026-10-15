@@ -1,4 +1,3 @@
-import { useEffect, useRef, useState } from 'react';
 import './XiangqiBoard.css';
 
 const BOARD = {
@@ -19,15 +18,10 @@ const PIECE_LABELS = {
   soldier: 'Chốt'
 };
 
-function point(fileIndex, rank, orientation = 'red') {
-  const isBlackView = orientation === 'black';
+function point(fileIndex, rank) {
   return {
-    x: isBlackView
-      ? BOARD.right - (BOARD.right - BOARD.left) * (fileIndex / 8)
-      : BOARD.left + (BOARD.right - BOARD.left) * (fileIndex / 8),
-    y: isBlackView
-      ? BOARD.top + (BOARD.bottom - BOARD.top) * (rank / 9)
-      : BOARD.bottom - (BOARD.bottom - BOARD.top) * (rank / 9)
+    x: BOARD.left + (BOARD.right - BOARD.left) * (fileIndex / 8),
+    y: BOARD.bottom - (BOARD.bottom - BOARD.top) * (rank / 9)
   };
 }
 
@@ -110,14 +104,14 @@ function BoardDetails() {
   );
 }
 
-function Piece({ piece, orientation, selected, interactive, dragPoint }) {
+function Piece({ piece }) {
   if (!piece || typeof piece.position !== 'string' || !/^[a-i][0-9]$/i.test(piece.position)) {
     return null;
   }
 
   const fileIndex = FILES.indexOf(piece.position[0].toLowerCase());
   const rank = Number(piece.position.slice(1));
-  const { x, y } = dragPoint || point(fileIndex, rank, orientation);
+  const { x, y } = point(fileIndex, rank);
   const label = PIECE_LABELS[piece.type];
 
   if (fileIndex < 0 || rank < 0 || rank > 9 || !label) {
@@ -126,13 +120,9 @@ function Piece({ piece, orientation, selected, interactive, dragPoint }) {
 
   return (
     <g
-      className={`xiangqi-piece ${piece.color}${selected ? ' is-selected' : ''}${interactive ? ' is-interactive' : ''}`}
+      className={`xiangqi-piece ${piece.color}`}
       transform={`translate(${x} ${y})`}
       aria-label={`${piece.color === 'red' ? 'Đỏ' : 'Đen'} ${label} tại ${piece.position}`}
-      aria-pressed={selected}
-      data-position={piece.position}
-      data-piece-id={piece.id}
-      role={interactive ? 'button' : undefined}
     >
       <circle className="piece-shadow" cx="1.5" cy="4" r="35" />
       <circle className="piece-edge" r="33" />
@@ -153,145 +143,17 @@ function Piece({ piece, orientation, selected, interactive, dragPoint }) {
   );
 }
 
-function toSvgPoint(svg, clientX, clientY) {
-  const matrix = svg.getScreenCTM();
-  if (!matrix) return null;
-  const point = svg.createSVGPoint();
-  point.x = clientX;
-  point.y = clientY;
-  return point.matrixTransform(matrix.inverse());
-}
-
-function getPositionAt(svg, clientX, clientY, orientation) {
-  const local = toSvgPoint(svg, clientX, clientY);
-  if (!local) return null;
-
-  const fileStep = (BOARD.right - BOARD.left) / 8;
-  const rankStep = (BOARD.bottom - BOARD.top) / 9;
-  const displayFile = Math.round((local.x - BOARD.left) / fileStep);
-  const displayRank = orientation === 'black'
-    ? Math.round((local.y - BOARD.top) / rankStep)
-    : Math.round((BOARD.bottom - local.y) / rankStep);
-  const target = point(orientation === 'black' ? 8 - displayFile : displayFile, displayRank, orientation);
-  if (
-    displayFile < 0 || displayFile > 8 || displayRank < 0 || displayRank > 9 ||
-    Math.hypot(local.x - target.x, local.y - target.y) > 46
-  ) {
-    return null;
-  }
-
-  return `${FILES[orientation === 'black' ? 8 - displayFile : displayFile]}${displayRank}`;
-}
-
-export default function XiangqiBoard({
-  pieces,
-  countdown = null,
-  readOnly = true,
-  playerColor = null,
-  interactive = false,
-  movePending = false,
-  orientation = 'red',
-  onMove = () => {},
-}) {
-  const [selectedPieceId, setSelectedPieceId] = useState(null);
-  const [dragPoint, setDragPoint] = useState(null);
-  const dragRef = useRef(null);
-  const suppressClickRef = useRef(false);
-  const selectedPiece = pieces.find((piece) => piece.id === selectedPieceId);
-  const coordinates = orientation === 'black' ? [...FILES].reverse() : [...FILES];
-  const boardPositionSignature = pieces.map((piece) => `${piece.id}:${piece.position}`).join('|');
-
-  useEffect(() => {
-    setSelectedPieceId(null);
-    setDragPoint(null);
-    dragRef.current = null;
-  }, [boardPositionSignature, interactive, orientation]);
-
-  function handlePointerDown(event) {
-    if (!interactive || movePending) return;
-    const pieceNode = event.target.closest('[data-piece-id]');
-    if (!pieceNode) return;
-
-    const piece = pieces.find((candidate) => candidate.id === pieceNode.dataset.pieceId);
-    if (!piece || piece.color !== playerColor) return;
-    setSelectedPieceId(piece.id);
-    suppressClickRef.current = true;
-    const svgPoint = toSvgPoint(event.currentTarget, event.clientX, event.clientY);
-    dragRef.current = {
-      pointerId: event.pointerId,
-      from: piece.position,
-      pieceId: piece.id,
-      wasSelected: selectedPieceId === piece.id,
-    };
-    if (svgPoint) setDragPoint({ pieceId: piece.id, x: svgPoint.x, y: svgPoint.y });
-    event.currentTarget.setPointerCapture(event.pointerId);
-  }
-
-  function handlePointerMove(event) {
-    if (!interactive || dragRef.current?.pointerId !== event.pointerId) return;
-    const svgPoint = toSvgPoint(event.currentTarget, event.clientX, event.clientY);
-    if (svgPoint) {
-      setDragPoint({ pieceId: dragRef.current.pieceId, x: svgPoint.x, y: svgPoint.y });
-    }
-  }
-
-  function handlePointerUp(event) {
-    const drag = dragRef.current;
-    if (!drag || drag.pointerId !== event.pointerId) return;
-    const target = getPositionAt(event.currentTarget, event.clientX, event.clientY, orientation);
-    dragRef.current = null;
-    setDragPoint(null);
-
-    if (target && target !== drag.from) {
-      suppressClickRef.current = true;
-      setSelectedPieceId(null);
-      onMove(drag.from, target);
-    } else if (target === drag.from && drag.wasSelected) {
-      suppressClickRef.current = false;
-    } else if (event.type === 'pointercancel') {
-      suppressClickRef.current = false;
-    }
-    window.setTimeout(() => {
-      suppressClickRef.current = false;
-    }, 0);
-  }
-
-  function handleClick(event) {
-    if (!interactive || movePending) return;
-    if (suppressClickRef.current) {
-      suppressClickRef.current = false;
-      return;
-    }
-    const targetPosition = getPositionAt(event.currentTarget, event.clientX, event.clientY, orientation);
-    if (!targetPosition) return;
-
-    const targetPiece = pieces.find((piece) => piece.position === targetPosition);
-    if (targetPiece?.color === playerColor) {
-      setSelectedPieceId(targetPiece.id === selectedPieceId ? null : targetPiece.id);
-      return;
-    }
-
-    if (selectedPiece) {
-      onMove(selectedPiece.position, targetPosition);
-      setSelectedPieceId(null);
-    }
-  }
-
+export default function XiangqiBoard({ pieces, countdown = null, readOnly = true }) {
   return (
     <div className="xiangqi-board-frame">
       <div className="board-coordinate coordinate-top">
-        {coordinates.map((file) => <span key={file}>{file}</span>)}
+        {FILES.split('').map((file) => <span key={file}>{file}</span>)}
       </div>
       <svg
         className="xiangqi-board"
         viewBox="0 0 900 1000"
-        role={interactive ? 'application' : 'img'}
+        role="img"
         aria-label={`Bàn cờ Tướng 9 cột 10 hàng với ${pieces.length} quân${readOnly ? ', chế độ chỉ xem' : ''}`}
-        onPointerDown={handlePointerDown}
-        onPointerMove={handlePointerMove}
-        onPointerUp={handlePointerUp}
-        onPointerCancel={handlePointerUp}
-        onClick={handleClick}
       >
         <defs>
           <linearGradient id="board-wood" x1="0" y1="0" x2="1" y2="1">
@@ -342,25 +204,16 @@ export default function XiangqiBoard({
         </g>
         <g className="board-coordinates" aria-hidden="true">
           {Array.from({ length: 10 }, (_, rank) => {
-            const { y } = point(0, rank, orientation);
+            const { y } = point(0, rank);
             return <text key={`rank-label-${rank}`} x="40" y={y + 4} textAnchor="middle">{rank}</text>;
           })}
         </g>
         <g className="pieces-layer">
-          {pieces.map((piece) => (
-            <Piece
-              key={piece.id}
-              piece={piece}
-              orientation={orientation}
-              selected={piece.id === selectedPieceId}
-              interactive={interactive && piece.color === playerColor}
-              dragPoint={dragPoint?.pieceId === piece.id ? dragPoint : null}
-            />
-          ))}
+          {pieces.map((piece) => <Piece key={piece.id} piece={piece} />)}
         </g>
       </svg>
       <div className="board-coordinate coordinate-bottom">
-        {coordinates.map((file) => <span key={file}>{file}</span>)}
+        {FILES.split('').map((file) => <span key={file}>{file}</span>)}
       </div>
       {readOnly && <div className="board-readonly-tag"><span>◉</span> CHẾ ĐỘ QUAN SÁT</div>}
       {countdown !== null && (
