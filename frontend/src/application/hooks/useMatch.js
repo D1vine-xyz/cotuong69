@@ -1,6 +1,51 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { fetchMatch, matchWebSocketUrl } from '../../infrastructure/api/matchApi';
 
+function isMatchColor(color) {
+  return color === 'red' || color === 'black';
+}
+
+function moveKey(lastMove) {
+  if (!lastMove) return null;
+  return `${lastMove.color}:${lastMove.from}:${lastMove.to}:${Boolean(lastMove.captured)}`;
+}
+
+function withCheckStatus(serverState, message, previousMatch) {
+  if (!serverState) return serverState;
+
+  const checkValue = typeof serverState.check === 'boolean'
+    ? serverState.check
+    : typeof serverState.inCheck === 'boolean'
+      ? serverState.inCheck
+      : typeof message.check === 'boolean'
+        ? message.check
+        : typeof message.inCheck === 'boolean'
+          ? message.inCheck
+          : null;
+  const reportedColor = isMatchColor(serverState.checkedColor)
+    ? serverState.checkedColor
+    : isMatchColor(message.checkedColor)
+      ? message.checkedColor
+      : null;
+  const hasReportedStatus = checkValue !== null || reportedColor !== null;
+
+  if (hasReportedStatus) {
+    const isChecked = checkValue ?? Boolean(reportedColor);
+    return {
+      ...serverState,
+      check: isChecked,
+      checkedColor: isChecked ? reportedColor || serverState.currentTurn : null,
+    };
+  }
+
+  const sameMove = moveKey(serverState.lastMove) === moveKey(previousMatch?.lastMove);
+  return {
+    ...serverState,
+    check: sameMove ? Boolean(previousMatch?.check) : false,
+    checkedColor: sameMove ? previousMatch?.checkedColor || null : null,
+  };
+}
+
 export function useMatch(matchId) {
   const [state, setState] = useState({
     match: null,
@@ -48,7 +93,7 @@ export function useMatch(matchId) {
             if (message.type === 'welcome' || message.type === 'state') {
               setState((current) => ({
                 ...current,
-                match: message.state,
+                match: withCheckStatus(message.state, message, current.match),
                 color: message.color,
                 readOnly: message.readOnly,
                 loading: false,
@@ -57,13 +102,25 @@ export function useMatch(matchId) {
               }));
             } else if (message.type === 'moveResult') {
               pendingRef.current = false;
-              setState((current) => ({
-                ...current,
-                movePending: false,
-                moveError: message.accepted ? null : message.error,
-                moveResult: message.accepted ? message : null,
-                match: message.state || current.match,
-              }));
+              setState((current) => {
+                const nextMatch = message.state || current.match;
+                const match = nextMatch && typeof message.check === 'boolean'
+                  ? {
+                    ...nextMatch,
+                    check: message.check,
+                    checkedColor: message.check
+                      ? nextMatch.currentTurn || null
+                      : null,
+                  }
+                  : nextMatch;
+                return {
+                  ...current,
+                  movePending: false,
+                  moveError: message.accepted ? null : message.error,
+                  moveResult: message.accepted ? message : null,
+                  match,
+                };
+              });
             } else if (message.type === 'error') {
               setState((current) => ({ ...current, moveError: message.error }));
             }
