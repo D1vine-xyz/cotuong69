@@ -58,8 +58,8 @@ backend/src/
 
 ---
 
-## Match API phát triển cho COT-615
+## Match API và nước đi realtime cho COT-615 / COT-616
 
-Chạy `npm start` để khởi động HTTP server tại cổng 5000 (có thể đổi bằng biến môi trường `PORT`). `GET /api/matches/COT-615` trả DTO Match chỉ đọc gồm 32 quân, người chơi, bên đi trước, trạng thái countdown và đồng hồ do server tính. Đồng hồ mẫu bắt đầu ở 2 phút mỗi bên. Các yêu cầu cập nhật trận bị từ chối để client khán giả không thể điều khiển quân.
+Chạy `npm start` để khởi động HTTP/WebSocket server tại cổng 5000 (có thể đổi bằng biến môi trường `PORT`). `GET /api/matches/COT-615` trả Match hiện tại. Kết nối `ws(s)://<host>/api/matches/COT-615/ws` nhận vai trò, snapshot và đồng hồ mỗi giây; client gửi `{ "type": "move", "from": "e3", "to": "e4" }`. Server xác thực bên được cấp, lượt, tọa độ, luật của từng quân, nước chiếu và trạng thái Tướng trước khi cập nhật; nước sai trả lỗi mà không đổi bàn cờ, lượt hoặc mốc đồng hồ.
 
-Đây là Match mẫu trong bộ nhớ, được khởi tạo khi có lượt đọc đầu tiên sau khi server khởi động; countdown bắt đầu từ lúc đó và Match được khởi tạo lại khi server restart. Nó chưa được gắn vào room lifecycle, tài khoản/xác thực, lưu trữ DB hay Socket.IO. Không dùng endpoint/match mẫu này như backend game production.
+Đây vẫn là Match mẫu trong bộ nhớ, khởi tạo khi request đầu tiên tới sau khi server khởi động; đồng hồ mỗi bên là 2 phút và Match reset khi server restart. Hai kết nối đầu tiên được cấp lần lượt Đỏ/Đen; kết nối khác là khán giả. Việc cấp phe này không xác thực người dùng, chưa nối vào room lifecycle hoặc database, nên chỉ dùng cho phát triển/kiểm thử, không dùng làm backend production.
