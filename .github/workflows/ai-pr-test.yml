@@ -1,7 +1,7 @@
 name: AI PR Quality Gate & Test Automation
 
 on:
-  pull_request:
+  pull_request_target:
     types: [opened, synchronize, reopened]
 
 permissions:
@@ -15,6 +15,9 @@ jobs:
     steps:
       - name: Checkout Code
         uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.pull_request.head.sha }}
+          fetch-depth: 0
 
       - name: Set up Node.js
         uses: actions/setup-node@v4
@@ -40,15 +43,15 @@ jobs:
           npm test 2>&1 | tee ../backend_test.log
         continue-on-error: true
 
-      - name: Run Frontend Build
+      - name: Run Frontend Tests & Build
         id: build_frontend
         run: |
           cd frontend
+          npm test 2>&1 | tee ../frontend_test.log || true
           npm run build 2>&1 | tee ../frontend_build.log
         continue-on-error: true
 
-      - name: AI Diagnosis & Auto Create Issue on Failure
-        if: steps.test_backend.outcome == 'failure' || steps.build_frontend.outcome == 'failure'
+      - name: AI Quality Gate & Scope Verification
         env:
           JIRA_BASE_URL: ${{ secrets.JIRA_BASE_URL || 'https://cotuong69.atlassian.net' }}
           JIRA_USER_EMAIL: ${{ secrets.JIRA_USER_EMAIL }}
@@ -59,12 +62,8 @@ jobs:
           PR_TITLE: ${{ github.event.pull_request.title }}
           PR_URL: ${{ github.event.pull_request.html_url }}
           PR_AUTHOR: ${{ github.event.pull_request.user.login }}
+          PR_BRANCH: ${{ github.head_ref || github.event.pull_request.head.ref }}
+          BASE_REF: ${{ github.base_ref || 'main' }}
           BACKEND_OUTCOME: ${{ steps.test_backend.outcome }}
           FRONTEND_OUTCOME: ${{ steps.build_frontend.outcome }}
         run: python3 .github/scripts/ai_pr_tester.py
-
-      - name: Block Merge on Failure
-        if: steps.test_backend.outcome == 'failure' || steps.build_frontend.outcome == 'failure'
-        run: |
-          echo "::error::Kiểm thử tự động thất bại! AI Agent đã lập Issue và phản hồi trên PR."
-          exit 1
