@@ -1,6 +1,7 @@
 const { URL } = require('node:url');
 const RegisterUserUseCase = require('../../../application/useCases/registerUser');
 const LoginUserUseCase = require('../../../application/useCases/loginUser');
+const ForgotPasswordUseCase = require('../../../application/useCases/forgotPassword');
 const { authenticateRequest } = require('../middlewares/authMiddleware');
 const PgUserRepository = require('../../../infrastructure/database/repositories/PgUserRepository');
 
@@ -45,6 +46,7 @@ function parseJsonBody(request) {
 function createAuthHandler({
   registerUseCase = new RegisterUserUseCase(),
   loginUseCase = new LoginUserUseCase(),
+  forgotPasswordUseCase = new ForgotPasswordUseCase(),
   userRepository = new PgUserRepository(),
   authMiddlewareOptions = {},
 } = {}) {
@@ -130,7 +132,38 @@ function createAuthHandler({
       return;
     }
 
-    // 3. Lấy thông tin phiên hiện tại (Protected API - COT-572)
+    // 3. Quên mật khẩu - gửi OTP/Token (COT-575)
+    if (pathname === '/api/auth/forgot-password') {
+      if (request.method !== 'POST') {
+        sendJson(response, 405, { error: 'Phương thức không được hỗ trợ. Chỉ chấp nhận POST.' });
+        return;
+      }
+
+      let payload;
+      try {
+        payload = await parseJsonBody(request);
+      } catch (err) {
+        sendJson(response, 400, { error: err.message });
+        return;
+      }
+
+      try {
+        const result = await forgotPasswordUseCase.execute(payload);
+        sendJson(response, 200, result);
+      } catch (err) {
+        if (err.code === 'VALIDATION_ERROR') {
+          sendJson(response, 400, { error: err.message });
+        } else if (err.code === 'RATE_LIMIT_EXCEEDED') {
+          sendJson(response, 429, { error: err.message, code: err.code });
+        } else {
+          console.error('Lỗi khi quên mật khẩu:', err);
+          sendJson(response, 500, { error: 'Lỗi máy chủ nội bộ. Vui lòng thử lại sau.' });
+        }
+      }
+      return;
+    }
+
+    // 4. Lấy thông tin phiên hiện tại (Protected API - COT-572)
     if (pathname === '/api/auth/me') {
       if (request.method !== 'GET') {
         sendJson(response, 405, { error: 'Phương thức không được hỗ trợ. Chỉ chấp nhận GET.' });
