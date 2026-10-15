@@ -87,6 +87,9 @@ function makePlayBotTurn({ pveMatchRepository, applyAndPersistMove, finishPveMat
       if (err instanceof AppError && err.code === ERROR_CODES.MOVE_CONFLICT) {
         return skip(BOT_TURN_SKIP_REASON.ALREADY_PLAYED, await pveMatchRepository.findById(matchId));
       }
+      if (err instanceof AppError && err.code === ERROR_CODES.MATCH_FINISHED) {
+        return skip(BOT_TURN_SKIP_REASON.MATCH_FINISHED, await pveMatchRepository.findById(matchId));
+      }
       throw err;
     }
   };

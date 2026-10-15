@@ -11,7 +11,8 @@
  *   result: null|'WIN'|'LOSS',                   // theo góc nhìn người chơi
  *   endReason: null|string,
  *   ply: number,                                 // số nước đã đi
- *   createdAt: Date, updatedAt: Date, finishedAt: Date|null
+ *   createdAt: Date, updatedAt: Date, finishedAt: Date|null,
+ *   turnStartedAt: Date                          // thời điểm bắt đầu lượt hiện tại (COT-636)
  * }
  */
 const PVE_MATCH_STATUS = Object.freeze({
@@ -38,6 +39,21 @@ const PVE_ACTOR = Object.freeze({
 
 const COLORS = Object.freeze(['red', 'black']);
 
+// Thời gian tối đa cho MỘT lượt đi của người chơi (COT-636). Máy không bị tính giờ.
+const PLAYER_TURN_LIMIT_MS = 60 * 1000;
+
+/**
+ * Lượt hiện tại của người chơi đã hết giờ chưa (đủ 60 giây là hết giờ)
+ * @param {object} match
+ * @param {Date} now
+ */
+function isPlayerTurnExpired(match, now) {
+  if (match.status !== PVE_MATCH_STATUS.PLAYING || match.sideToMove !== match.playerColor) {
+    return false;
+  }
+  return now.getTime() - match.turnStartedAt.getTime() >= PLAYER_TURN_LIMIT_MS;
+}
+
 /**
  * Kết quả trận theo góc nhìn người chơi khi biết bên thua
  * @param {'red'|'black'} playerColor
@@ -54,5 +70,7 @@ module.exports = {
   PVE_END_REASON,
   PVE_ACTOR,
   COLORS,
+  PLAYER_TURN_LIMIT_MS,
   resultForPlayer,
+  isPlayerTurnExpired,
 };
