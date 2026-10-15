@@ -3,6 +3,7 @@ const RegisterUserUseCase = require('../../../application/useCases/registerUser'
 const LoginUserUseCase = require('../../../application/useCases/loginUser');
 const ForgotPasswordUseCase = require('../../../application/useCases/forgotPassword');
 const ResetPasswordUseCase = require('../../../application/useCases/resetPassword');
+const OAuthLoginUseCase = require('../../../application/useCases/oauthLogin');
 const { authenticateRequest } = require('../middlewares/authMiddleware');
 const PgUserRepository = require('../../../infrastructure/database/repositories/PgUserRepository');
 
@@ -49,6 +50,7 @@ function createAuthHandler({
   loginUseCase = new LoginUserUseCase(),
   forgotPasswordUseCase = new ForgotPasswordUseCase(),
   resetPasswordUseCase = new ResetPasswordUseCase(),
+  oauthLoginUseCase = new OAuthLoginUseCase(),
   userRepository = new PgUserRepository(),
   authMiddlewareOptions = {},
 } = {}) {
@@ -196,7 +198,63 @@ function createAuthHandler({
       return;
     }
 
-    // 5. Lấy thông tin phiên hiện tại (Protected API - COT-572)
+    // 5. Đăng nhập Google OAuth (COT-573)
+    if (pathname === '/api/auth/google') {
+      if (request.method !== 'POST') {
+        sendJson(response, 405, { error: 'Phương thức không được hỗ trợ. Chỉ chấp nhận POST.' });
+        return;
+      }
+
+      let payload;
+      try {
+        payload = await parseJsonBody(request);
+      } catch (err) {
+        sendJson(response, 400, { error: err.message });
+        return;
+      }
+
+      try {
+        const result = await oauthLoginUseCase.execute({
+          provider: 'google',
+          credential: payload.credential || payload.token || payload.idToken,
+          redirectUrl: payload.redirectUrl,
+        });
+        sendJson(response, 200, result);
+      } catch (err) {
+        sendJson(response, err.statusCode || 400, { error: err.message, code: err.code });
+      }
+      return;
+    }
+
+    // 6. Đăng nhập Facebook OAuth (COT-573)
+    if (pathname === '/api/auth/facebook') {
+      if (request.method !== 'POST') {
+        sendJson(response, 405, { error: 'Phương thức không được hỗ trợ. Chỉ chấp nhận POST.' });
+        return;
+      }
+
+      let payload;
+      try {
+        payload = await parseJsonBody(request);
+      } catch (err) {
+        sendJson(response, 400, { error: err.message });
+        return;
+      }
+
+      try {
+        const result = await oauthLoginUseCase.execute({
+          provider: 'facebook',
+          credential: payload.accessToken || payload.token || payload.credential,
+          redirectUrl: payload.redirectUrl,
+        });
+        sendJson(response, 200, result);
+      } catch (err) {
+        sendJson(response, err.statusCode || 400, { error: err.message, code: err.code });
+      }
+      return;
+    }
+
+    // 7. Lấy thông tin phiên hiện tại (Protected API - COT-572)
     if (pathname === '/api/auth/me') {
       if (request.method !== 'GET') {
         sendJson(response, 405, { error: 'Phương thức không được hỗ trợ. Chỉ chấp nhận GET.' });
