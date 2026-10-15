@@ -119,4 +119,4 @@ function getKingMoves(board, row, col) {
   return moves;
 }
 
-module.exports = { getKingMoves, areKingsFacing, isInPalace };
+module.exports = { getKingMoves, areKingsFacing, isInPalace, findKing };
