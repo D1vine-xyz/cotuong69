@@ -14,6 +14,8 @@
   display: block;
   width: 100%;
   overflow: visible;
+  touch-action: none;
+  user-select: none;
 }
 
 .board-paper {
@@ -103,10 +105,22 @@
   cursor: default;
   transform-box: fill-box;
   transform-origin: center;
-  transition: filter .18s ease, transform .18s ease;
+  transition: filter .18s ease, transform .2s cubic-bezier(.2,.75,.25,1);
 }
 
 .xiangqi-piece:hover { filter: brightness(1.06) drop-shadow(0 3px 3px rgba(56, 31, 14, .26)); }
+.xiangqi-piece.is-interactive { cursor: grab; }
+.xiangqi-piece.is-interactive:active { cursor: grabbing; }
+.xiangqi-piece.is-selected {
+  filter: drop-shadow(0 0 8px rgba(255, 211, 101, .95));
+}
+.xiangqi-piece.is-selected .piece-edge {
+  stroke: #ffe08a;
+  stroke-width: 4;
+}
+.xiangqi-piece.is-selected .piece-face {
+  stroke-width: 3;
+}
 
 .piece-shadow {
   fill: rgba(52, 32, 17, .3);
