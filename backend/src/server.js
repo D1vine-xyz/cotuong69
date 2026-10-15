@@ -5,12 +5,13 @@ const { applyMatchMove, createCot615Match, getPublicMatchState } = require('./do
 const { createMatchesHandler } = require('./presentation/http/routes/matches.routes');
 const { createAuthHandler } = require('./presentation/http/routes/auth.routes');
 const { createUserHandler } = require('./presentation/http/routes/user.routes');
+const { createRoomHandler } = require('./presentation/http/routes/room.routes');
 const fs = require('node:fs');
 const path = require('node:path');
 
 function createServer(options = {}) {
   let match = options.match || null;
-  const now = options.now || Date.now;
+  const now = options.now || (() => Date.now());
   const clients = new Map();
   const webSockets = new WebSocketServer({ noServer: true });
   const getCurrentMatch = () => {
@@ -23,6 +24,7 @@ function createServer(options = {}) {
   });
   const authHandler = options.authHandler || createAuthHandler(options.authOptions);
   const userHandler = options.userHandler || createUserHandler(options.userOptions);
+  const roomHandler = options.roomHandler || createRoomHandler(options.roomOptions);
 
   const httpHandler = (req, res) => {
     let pathname = '';
@@ -39,6 +41,9 @@ function createServer(options = {}) {
     }
     if (pathname.startsWith('/api/users')) {
       return userHandler(req, res);
+    }
+    if (pathname.startsWith('/api/rooms')) {
+      return roomHandler(req, res);
     }
     if (pathname.startsWith('/uploads/')) {
       const filePath = path.resolve(__dirname, '..', pathname.replace(/^\//, ''));
