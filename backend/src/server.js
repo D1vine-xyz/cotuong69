@@ -3,6 +3,7 @@ const { URL } = require('node:url');
 const { WebSocketServer } = require('ws');
 const { applyMatchMove, createCot615Match, getPublicMatchState } = require('./domain/entities/cot615Match');
 const { createMatchesHandler } = require('./presentation/http/routes/matches.routes');
+const { createAuthHandler } = require('./presentation/http/routes/auth.routes');
 
 function createServer(options = {}) {
   let match = options.match || null;
@@ -13,11 +14,29 @@ function createServer(options = {}) {
     if (!match) match = createCot615Match(now());
     return match;
   };
-  const handler = createMatchesHandler({
+  const matchesHandler = createMatchesHandler({
     getMatch: getCurrentMatch,
     now,
   });
-  const server = http.createServer(handler);
+  const authHandler = options.authHandler || createAuthHandler(options.authOptions);
+
+  const httpHandler = (req, res) => {
+    let pathname = '';
+    try {
+      pathname = new URL(req.url, 'http://localhost').pathname;
+    } catch {
+      res.writeHead(400, { 'Content-Type': 'application/json' });
+      res.end(JSON.stringify({ error: 'URL không hợp lệ' }));
+      return;
+    }
+
+    if (pathname.startsWith('/api/auth')) {
+      return authHandler(req, res);
+    }
+    return matchesHandler(req, res);
+  };
+
+  const server = http.createServer(httpHandler);
 
   function send(client, message) {
     if (client.readyState === 1) client.send(JSON.stringify(message));
