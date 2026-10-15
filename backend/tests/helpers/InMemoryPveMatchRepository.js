@@ -1,0 +1,78 @@
+/**
+ * Hiện thực IPveMatchRepository trong bộ nhớ, chỉ dùng cho unit test use-case.
+ * Giữ cùng ngữ nghĩa với PgPveMatchRepository: dữ liệu được sao chép khi đọc/ghi
+ * và saveMove chỉ ghi khi trận PLAYING và ply khớp expectedPly.
+ */
+const clone = (value) => JSON.parse(JSON.stringify(value));
+
+class InMemoryPveMatchRepository {
+  constructor() {
+    this.matches = new Map();
+    this.moves = new Map();
+    this.nextId = 1;
+  }
+
+  toMatch(stored) {
+    const copy = clone(stored);
+    return {
+      ...copy,
+      createdAt: new Date(stored.createdAt),
+      updatedAt: new Date(stored.updatedAt),
+      finishedAt: stored.finishedAt ? new Date(stored.finishedAt) : null,
+    };
+  }
+
+  async create({ userId, playerColor, botColor, board, sideToMove, now }) {
+    const id = this.nextId++;
+    this.matches.set(id, {
+      id,
+      userId,
+      playerColor,
+      botColor,
+      board: clone(board),
+      sideToMove,
+      status: 'PLAYING',
+      result: null,
+      endReason: null,
+      ply: 0,
+      createdAt: now,
+      updatedAt: now,
+      finishedAt: null,
+    });
+    this.moves.set(id, []);
+    return this.findById(id);
+  }
+
+  async findById(matchId) {
+    const stored = this.matches.get(Number(matchId));
+    return stored ? this.toMatch(stored) : null;
+  }
+
+  async saveMove({ matchId, expectedPly, board, sideToMove, move, now }) {
+    const stored = this.matches.get(Number(matchId));
+    if (!stored || stored.status !== 'PLAYING' || stored.ply !== expectedPly) {
+      return false;
+    }
+    stored.board = clone(board);
+    stored.sideToMove = sideToMove;
+    stored.ply += 1;
+    stored.updatedAt = now;
+    this.moves.get(stored.id).push({ ...clone(move), ply: stored.ply, createdAt: now });
+    return true;
+  }
+
+  async listMoves(matchId) {
+    return (this.moves.get(Number(matchId)) || []).map((m) => ({
+      ply: m.ply,
+      side: m.side,
+      actor: m.actor,
+      pieceType: m.pieceType,
+      from: { ...m.from },
+      to: { ...m.to },
+      capturedType: m.capturedType || null,
+      createdAt: new Date(m.createdAt),
+    }));
+  }
+}
+
+module.exports = { InMemoryPveMatchRepository };
