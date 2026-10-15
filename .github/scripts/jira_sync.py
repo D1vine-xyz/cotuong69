@@ -40,7 +40,7 @@ def main():
     elif event_name == "push":
         # Khi push commit vào feature branch -> Chuyển sang IN PROGRESS (ID: 21)
         transition_id = "21"
-    elif event_name == "pull_request":
+    elif event_name in ["pull_request", "pull_request_target"]:
         pr_action = os.environ.get("PR_ACTION", "")
         if pr_action in ["opened", "reopened"]:
             # Khi mở PR -> Chuyển sang READY FOR TEST (ID: 71)
