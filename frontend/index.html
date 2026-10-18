@@ -25,13 +25,19 @@
         </div>
       </div>
       
-      <div class="user-profile">
-        <div class="user-avatar" id="currentUserAvatar">桑</div>
-        <div class="user-details">
-          <span class="user-name" id="currentUserName">Nguyễn Tấn Sang</span>
-          <span class="user-elo">Elo: <strong id="currentUserElo">1250</strong></span>
+      <div class="user-auth-wrapper">
+        <div class="user-profile" id="userProfileBar">
+          <div class="user-avatar" id="currentUserAvatar">桑</div>
+          <div class="user-details">
+            <span class="user-name" id="currentUserName">Nguyễn Tấn Sang</span>
+            <span class="user-elo">Elo: <strong id="currentUserElo">1250</strong></span>
+          </div>
+          <button type="button" id="headerLogoutBtn" class="btn-logout" title="Đăng xuất để thử nghiệm luồng mở link mời">Đăng xuất</button>
+          <div class="status-indicator online" title="Đang kết nối Realtime"></div>
         </div>
-        <div class="status-indicator online" title="Đang kết nối Realtime"></div>
+        <button type="button" id="openLoginModalBtn" class="btn btn-gold btn-sm" style="display: none;">
+          <span>🔑 Đăng Nhập</span>
+        </button>
       </div>
     </div>
   </header>
@@ -328,6 +334,72 @@
           <button type="submit" id="submitCreateRoomBtn" class="btn btn-gold btn-large">
             <span class="btn-spinner" id="createRoomSpinner" style="display: none;"></span>
             <span id="createRoomBtnText">+ Tạo Phòng Ngay</span>
+          </button>
+        </div>
+      </form>
+    </div>
+  </div>
+
+  <!-- Login Modal (COT-603) -->
+  <div id="loginModal" class="modal-overlay" style="display: none;" role="dialog" aria-modal="true" aria-labelledby="loginModalHeading">
+    <div class="modal-card modal-card-login">
+      <div class="modal-header">
+        <div class="modal-title-with-icon">
+          <span class="header-icon">🔐</span>
+          <h3 id="loginModalHeading">Đăng Nhập Kỳ Đạo Online</h3>
+        </div>
+        <button id="closeLoginModalBtn" class="close-btn" aria-label="Đóng">&times;</button>
+      </div>
+
+      <form id="loginForm" class="login-form" novalidate>
+        <div class="modal-body">
+          <!-- Banner thông báo khi người dùng mở liên kết mời vào phòng -->
+          <div id="loginPendingRoomBanner" class="pending-room-invite-banner" style="display: none;">
+            <div class="banner-icon">🔗</div>
+            <div class="banner-text">
+              <strong>Mở phòng cờ từ liên kết mời:</strong>
+              <p>Mã phòng: <span id="pendingRoomCodeDisplay" class="highlight-code">------</span>. Sau khi đăng nhập, hệ thống sẽ tự động đưa bạn vào đúng phòng chơi!</p>
+            </div>
+          </div>
+
+          <div class="form-group">
+            <label for="loginUsernameInput" class="form-label">
+              Tên Đăng Nhập / Email <span class="required-star">*</span>
+            </label>
+            <input 
+              type="text" 
+              id="loginUsernameInput" 
+              name="username" 
+              class="form-input" 
+              placeholder="Nhập tên đăng nhập hoặc email..."
+              autocomplete="username"
+              value="nguyen_tan_sang"
+            >
+            <div id="loginUsernameError" class="input-error-msg" role="alert"></div>
+          </div>
+
+          <div class="form-group">
+            <label for="loginPasswordInput" class="form-label">
+              Mật Khẩu <span class="required-star">*</span>
+            </label>
+            <input 
+              type="password" 
+              id="loginPasswordInput" 
+              name="password" 
+              class="form-input" 
+              placeholder="Nhập mật khẩu..."
+              autocomplete="current-password"
+              value="12345678"
+            >
+            <div id="loginPasswordError" class="input-error-msg" role="alert"></div>
+          </div>
+        </div>
+
+        <div class="modal-footer">
+          <button type="button" id="cancelLoginBtn" class="btn btn-secondary">Hủy Bỏ</button>
+          <button type="submit" id="submitLoginBtn" class="btn btn-primary btn-large">
+            <span class="btn-spinner" id="loginSpinner" style="display: none;"></span>
+            <span id="loginBtnText">Đăng Nhập & Vào Phòng</span>
           </button>
         </div>
       </form>
