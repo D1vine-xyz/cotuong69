@@ -9,12 +9,12 @@ function formatClock(seconds = 0) {
   return `${String(minutes).padStart(2, '0')}:${String(remainingSeconds).padStart(2, '0')}`;
 }
 
-function PlayerCard({ player, color, active, time }) {
+function PlayerCard({ player, color, active, time, isPaused = false }) {
   const isRed = color === 'red';
-  const clockIsLow = time <= 30;
+  const clockIsLow = time <= 30 && !isPaused;
 
   return (
-    <section className={`player-card ${active ? 'is-active' : ''}`}>
+    <section className={`player-card ${active ? 'is-active' : ''} ${isPaused ? 'player-card-paused' : ''}`}>
       <div className={`player-avatar ${isRed ? 'red' : 'black'}`}>
         {player.name.slice(0, 1)}
       </div>
@@ -22,14 +22,22 @@ function PlayerCard({ player, color, active, time }) {
         <span className="player-side">
           <span className={`side-dot ${isRed ? 'red' : 'black'}`} />
           {isRed ? 'QUÂN ĐỎ' : 'QUÂN ĐEN'}
-          {active && <span className="turn-chip">ĐANG ĐI</span>}
+          {active && (
+            <span className={`turn-chip ${isPaused ? 'turn-chip-paused' : ''}`}>
+              {isPaused ? 'TẠM DỪNG' : 'ĐANG ĐI'}
+            </span>
+          )}
         </span>
         <strong>{player.name}</strong>
         <span className="player-rating">{player.rating} ELO</span>
       </div>
-      <div className={`player-clock ${active ? 'clock-active' : ''} ${clockIsLow ? 'clock-low' : ''}`} aria-label={`Thời gian ${formatClock(time)}`}>
-        <span className="clock-icon" aria-hidden="true">◷</span>
-        {formatClock(time)}
+      <div
+        className={`player-clock ${active ? 'clock-active' : ''} ${clockIsLow ? 'clock-low' : ''} ${isPaused ? 'clock-paused' : ''}`}
+        aria-label={`Thời gian ${formatClock(time)}`}
+      >
+        <span className="clock-icon" aria-hidden="true">{isPaused ? '⏸' : '◷'}</span>
+        <span className="clock-digits">{formatClock(time)}</span>
+        {isPaused && <span className="clock-pause-tag">TẠM DỪNG</span>}
       </div>
     </section>
   );
@@ -115,6 +123,12 @@ function App() {
     moveError,
     sendMove,
     clearMoveError,
+    reconnectState,
+    simulateSelfDisconnect,
+    simulateSelfReconnect,
+    simulateOpponentDisconnect,
+    simulateOpponentReconnect,
+    simulateServerMatchResult,
   } = useMatch(matchId);
 
   useEffect(() => {
@@ -234,6 +248,44 @@ function App() {
                   <small>{perspectiveEnabled ? 'Đang nghiêng nhẹ bàn cờ' : 'Đang nhìn thẳng'}</small>
                 </span>
               </label>
+
+              {/* COT-601: Công cụ kiểm thử giả lập Mạng & Đối thủ */}
+              <div className="simulation-tools-group">
+                <span className="simulation-title">Kiểm thử mạng (COT-601)</span>
+                <button
+                  type="button"
+                  className="btn-sim"
+                  onClick={() => {
+                    if (reconnectState.selfDisconnected) simulateSelfReconnect();
+                    else simulateSelfDisconnect();
+                  }}
+                >
+                  {reconnectState.selfDisconnected ? '✓ Kết nối lại bản thân' : '⚡ Giả lập mất mạng bản thân'}
+                </button>
+                <button
+                  type="button"
+                  className="btn-sim"
+                  onClick={() => {
+                    if (reconnectState.opponentDisconnected) simulateOpponentReconnect();
+                    else simulateOpponentDisconnect(60);
+                  }}
+                >
+                  {reconnectState.opponentDisconnected ? '✓ Đối thủ kết nối lại' : '⚠️ Giả lập đối thủ mất mạng (60s)'}
+                </button>
+                <button
+                  type="button"
+                  className="btn-sim"
+                  onClick={() => {
+                    simulateServerMatchResult({
+                      winner: color || 'red',
+                      winnerColor: color || 'red',
+                      reason: 'DISCONNECT_TIMEOUT',
+                    });
+                  }}
+                >
+                  🏆 Máy chủ chốt kết quả (Timeout)
+                </button>
+              </div>
             </div>
           </details>
         </div>
@@ -253,6 +305,45 @@ function App() {
             </div>
           </div>
 
+          {/* COT-601 AC 1: Banner cảnh báo Đối thủ mất kết nối kèm đếm ngược 60s */}
+          {reconnectState.banner?.visible && (
+            <div
+              className={`opponent-disconnect-banner ${reconnectState.banner.type === 'WAITING_SERVER' ? 'banner-waiting-server' : ''}`}
+              role="alert"
+              aria-live="assertive"
+            >
+              <div className="banner-left-content">
+                <span className="banner-pulse-icon" aria-hidden="true">
+                  {reconnectState.banner.type === 'WAITING_SERVER' ? '⏳' : '⚠️'}
+                </span>
+                <div className="banner-texts">
+                  <div className="banner-title-line">
+                    <strong>{reconnectState.banner.title}</strong>
+                    <span className="banner-status-tag">
+                      {reconnectState.banner.type === 'WAITING_SERVER' ? 'Chờ máy chủ' : 'Tạm dừng ván'}
+                    </span>
+                  </div>
+                  <p className="banner-subtext">{reconnectState.banner.message}</p>
+                </div>
+              </div>
+              {reconnectState.banner.type === 'OPPONENT_DISCONNECTED' && (
+                <div className="banner-timer-badge" title="Đồng hồ đếm ngược chờ kết nối lại">
+                  <span className="timer-badge-label">HẠN CHỜ</span>
+                  <div className="timer-circle-box">
+                    <span className="timer-number">{reconnectState.banner.countdown}</span>
+                    <span className="timer-sec">s</span>
+                  </div>
+                </div>
+              )}
+              {reconnectState.banner.type === 'WAITING_SERVER' && (
+                <div className="banner-waiting-badge">
+                  <span className="server-spinner" />
+                  <span>Xử lý kết quả</span>
+                </div>
+              )}
+            </div>
+          )}
+
           {checkedColor && (
             <div className={`check-alert check-alert-${checkedColor}`} role="alert" aria-live="assertive">
               <span aria-hidden="true">!</span>
@@ -262,18 +353,48 @@ function App() {
           )}
 
           <div className={`board-shell ${perspectiveEnabled ? 'perspective-enabled' : ''}`}>
+            {/* COT-601 AC 1: Overlay thông báo khi chính người dùng mất kết nối */}
+            {reconnectState.overlay?.visible && (
+              <div className="reconnecting-overlay" role="alert" aria-live="assertive">
+                <div className="reconnecting-card">
+                  <div className="reconnecting-radar">
+                    <span className="radar-circle circle-1" />
+                    <span className="radar-circle circle-2" />
+                    <span className="radar-circle circle-3" />
+                    <span className="radar-icon" aria-hidden="true">📡</span>
+                  </div>
+                  <h3 className="reconnecting-title">{reconnectState.overlay.title}</h3>
+                  <p className="reconnecting-desc">{reconnectState.overlay.message}</p>
+                  <div className="reconnecting-badge">
+                    <span className="lock-icon" aria-hidden="true">🔒</span>
+                    <span>Toàn bộ thao tác trên bàn cờ đã được tạm khóa</span>
+                  </div>
+                  <div className="reconnecting-progress">
+                    <div className="progress-bar-glow" />
+                  </div>
+                </div>
+              </div>
+            )}
+
             <PlayerCard
               player={match.players.black}
               color="black"
               active={activePlayer === 'black'}
               time={match.clocks.black}
+              isPaused={reconnectState.normalClockPaused}
             />
             <XiangqiBoard
               pieces={match.board}
               countdown={countdown}
               readOnly={readOnly}
               playerColor={color}
-              interactive={!readOnly && !isStarting && currentTurn === color && !movePending}
+              interactive={
+                !readOnly &&
+                !isStarting &&
+                currentTurn === color &&
+                !movePending &&
+                reconnectState.canMove
+              }
               movePending={movePending}
               orientation={color === 'black' ? 'black' : 'red'}
               checkedColor={checkedGeneral ? checkedColor : null}
@@ -285,12 +406,37 @@ function App() {
               color="red"
               active={activePlayer === 'red'}
               time={match.clocks.red}
+              isPaused={reconnectState.normalClockPaused}
             />
             <div className="captured-trays" aria-live="polite">
               <CapturedTray color="black" pieces={capturedPieces.black} />
               <CapturedTray color="red" pieces={capturedPieces.red} />
             </div>
           </div>
+
+          {/* COT-601 AC 3: Modal kết quả ván đấu do máy chủ trả về */}
+          {reconnectState.serverResult && (
+            <div className="match-result-modal-overlay" role="dialog" aria-modal="true" aria-labelledby="resultModalTitle">
+              <div className="match-result-card">
+                <div className="result-header">
+                  <span className="result-trophy-icon" aria-hidden="true">🏆</span>
+                  <h3 id="resultModalTitle">KẾT QUẢ VÁN ĐẤU</h3>
+                  <span className="server-confirmed-badge">✓ Xác nhận từ Máy Chủ</span>
+                </div>
+                <div className="result-body">
+                  <div className="result-winner-box">
+                    <strong className="result-message-text">{reconnectState.serverResult.message}</strong>
+                  </div>
+                  <p className="result-rule-note">
+                    Kết quả đã được máy chủ cập nhật chính thức vào hệ thống giải đấu theo quy định thời gian chờ kết nối lại (COT-601).
+                  </p>
+                </div>
+                <div className="result-actions">
+                  <a href="/" className="btn btn-primary btn-large">Về Sảnh Chờ / Danh Sách Phòng</a>
+                </div>
+              </div>
+            </div>
+          )}
 
           {readOnly ? (
             <div className="spectator-note">
@@ -302,7 +448,15 @@ function App() {
             <div className="spectator-note player-instructions">
               <span className="spectator-icon" aria-hidden="true">♟</span>
               <span><strong>Bạn đang chơi bên {color === 'red' ? 'Đỏ' : 'Đen'}</strong><br />Chọn quân rồi chạm ô đích, hoặc kéo quân đến ô muốn đi.</span>
-              <span className="spectator-lock" aria-hidden="true">{movePending ? 'Đang gửi nước đi…' : 'Không hiển thị gợi ý nước đi'}</span>
+              <span className="spectator-lock" aria-hidden="true">
+                {reconnectState.selfDisconnected
+                  ? 'Mạng chập chờn — đang tạm khóa'
+                  : reconnectState.opponentDisconnected
+                    ? 'Đối thủ mất kết nối — tạm dừng'
+                    : movePending
+                      ? 'Đang gửi nước đi…'
+                      : 'Không hiển thị gợi ý nước đi'}
+              </span>
             </div>
           )}
           {moveError && <div className="move-alert" role="alert">{moveError}</div>}
@@ -319,17 +473,36 @@ function App() {
                 {currentTurn === 'black' ? '將' : '帥'}
               </span>
               <div>
-                <strong>{isStarting ? 'Chuẩn bị khai cuộc' : currentTurn === 'red' ? 'Đỏ đi trước' : 'Đen đang đi'}</strong>
-                <span>{isStarting ? 'Hai bên đã sẵn sàng' : `Lượt ${match.moveNumber}`}</span>
+                <strong>
+                  {reconnectState.normalClockPaused
+                    ? 'Tạm dừng ván đấu'
+                    : isStarting
+                      ? 'Chuẩn bị khai cuộc'
+                      : currentTurn === 'red'
+                        ? 'Đỏ đi trước'
+                        : 'Đen đang đi'}
+                </strong>
+                <span>
+                  {reconnectState.normalClockPaused
+                    ? 'Chờ kết nối lại'
+                    : isStarting
+                      ? 'Hai bên đã sẵn sàng'
+                      : `Lượt ${match.moveNumber}`}
+                </span>
               </div>
-              <span className="turn-pulse" />
+              <span className={`turn-pulse ${reconnectState.normalClockPaused ? 'pulse-paused' : ''}`} />
             </div>
             <div className="turn-fact">
               <span>Bên đi trước</span><strong><i className="fact-red-dot" /> Đỏ</strong>
             </div>
             <div className="turn-fact">
-            <span>Thời gian mỗi bên</span><strong>{formatClock(match.timeControlSeconds)}</strong>
+              <span>Thời gian mỗi bên</span><strong>{formatClock(match.timeControlSeconds)}</strong>
             </div>
+            {reconnectState.normalClockPaused && (
+              <div className="turn-fact fact-warning">
+                <span>Trạng thái</span><strong className="text-warning">Đang dừng chờ kết nối</strong>
+              </div>
+            )}
           </section>
 
           <section className="info-card match-info-card">
@@ -354,9 +527,15 @@ function App() {
             <div className="river-legend"><span /> <span>Sông phân cách hai chiến tuyến</span></div>
           </section>
 
-          <div className={`connection-state ${error ? 'connection-error' : ''}`}>
-            <span className={`connection-dot ${error ? 'error-dot' : ''}`} />
-            {error ? 'Mất kết nối — đang thử lại' : connected ? 'Đã kết nối thời gian thực' : 'Đang kết nối thời gian thực'}
+          <div className={`connection-state ${reconnectState.selfDisconnected || error ? 'connection-error' : ''}`}>
+            <span className={`connection-dot ${reconnectState.selfDisconnected || error ? 'error-dot' : ''}`} />
+            {reconnectState.selfDisconnected
+              ? 'Mạng chập chờn — đang kết nối lại...'
+              : error
+                ? 'Mất kết nối — đang thử lại'
+                : connected
+                  ? 'Đã kết nối thời gian thực'
+                  : 'Đang kết nối thời gian thực'}
           </div>
         </aside>
       </div>
@@ -364,9 +543,12 @@ function App() {
         <span>♟ &nbsp; KỲ THỦ ONLINE</span>
         <span>CHÚC CÁC KỲ THỦ CÓ MỘT VÁN CỜ HAY</span>
       </footer>
-      {error && <div className="connection-banner" role="alert">Không thể cập nhật trận đấu: {error}</div>}
+      {error && !reconnectState.selfDisconnected && (
+        <div className="connection-banner" role="alert">Không thể cập nhật trận đấu: {error}</div>
+      )}
     </main>
   );
 }
 
 export default App;
+

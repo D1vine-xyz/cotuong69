@@ -1,5 +1,6 @@
-import { useCallback, useEffect, useRef, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { fetchMatch, matchWebSocketUrl } from '../../infrastructure/api/matchApi';
+import { ReconnectManager } from '../../domain/network/reconnectManager';
 
 function isMatchColor(color) {
   return color === 'red' || color === 'black';
@@ -47,6 +48,9 @@ function withCheckStatus(serverState, message, previousMatch) {
 }
 
 export function useMatch(matchId) {
+  const reconnectManager = useMemo(() => new ReconnectManager({ maxWaitSeconds: 60 }), []);
+  const [reconnectState, setReconnectState] = useState(() => reconnectManager.getState());
+
   const [state, setState] = useState({
     match: null,
     loading: true,
@@ -60,6 +64,42 @@ export function useMatch(matchId) {
   });
   const socketRef = useRef(null);
   const pendingRef = useRef(false);
+
+  // Lắng nghe thay đổi trạng thái từ ReconnectManager
+  useEffect(() => {
+    const unsubscribe = reconnectManager.subscribe((next) => {
+      setReconnectState({ ...next });
+    });
+    return () => {
+      unsubscribe();
+      reconnectManager.destroy();
+    };
+  }, [reconnectManager]);
+
+  // Lắng nghe sự kiện offline / online của trình duyệt
+  useEffect(() => {
+    function handleBrowserOnline() {
+      reconnectManager.handleSelfReconnect();
+    }
+    function handleBrowserOffline() {
+      reconnectManager.handleSelfDisconnect('BROWSER_OFFLINE');
+    }
+
+    if (typeof window !== 'undefined') {
+      window.addEventListener('online', handleBrowserOnline);
+      window.addEventListener('offline', handleBrowserOffline);
+      if (window.navigator && window.navigator.onLine === false) {
+        reconnectManager.handleSelfDisconnect('NAVIGATOR_OFFLINE');
+      }
+    }
+
+    return () => {
+      if (typeof window !== 'undefined') {
+        window.removeEventListener('online', handleBrowserOnline);
+        window.removeEventListener('offline', handleBrowserOffline);
+      }
+    };
+  }, [reconnectManager]);
 
   useEffect(() => {
     if (!matchId) {
@@ -83,6 +123,7 @@ export function useMatch(matchId) {
         socket.addEventListener('open', () => {
           if (!cancelled) {
             retryDelay = 500;
+            reconnectManager.handleSelfReconnect();
             setState((current) => ({ ...current, connected: true, error: null }));
           }
         });
@@ -100,6 +141,35 @@ export function useMatch(matchId) {
                 connected: true,
                 error: null,
               }));
+              if (message.state?.status === 'completed' && message.state?.winner) {
+                reconnectManager.handleServerMatchResult({
+                  winner: message.state.winner,
+                  reason: message.state.endReason || 'COMPLETED',
+                });
+              }
+            } else if (
+              message.type === 'opponentDisconnected' ||
+              message.type === 'match:opponentDisconnected'
+            ) {
+              // COT-601: Đối thủ mất kết nối -> kích hoạt đếm ngược 60s & dừng đồng hồ lượt
+              reconnectManager.handleOpponentDisconnect({
+                player: message.player || 'opponent',
+                countdownSeconds: message.countdownSeconds || 60,
+              });
+            } else if (
+              message.type === 'opponentReconnected' ||
+              message.type === 'match:opponentReconnected'
+            ) {
+              // COT-601: Đối thủ kết nối lại kịp thời -> tắt banner & tiếp tục ván đấu
+              reconnectManager.handleOpponentReconnect();
+            } else if (message.type === 'matchEnded' || message.type === 'match:ended') {
+              // COT-601: Máy chủ chốt kết quả kết thúc trận
+              reconnectManager.handleServerMatchResult({
+                winner: message.winner,
+                winnerColor: message.winnerColor,
+                reason: message.reason || message.endReason,
+                message: message.message,
+              });
             } else if (message.type === 'moveResult') {
               pendingRef.current = false;
               setState((current) => {
@@ -135,6 +205,8 @@ export function useMatch(matchId) {
           if (cancelled) return;
           socketRef.current = null;
           pendingRef.current = false;
+          // COT-601: Mất kết nối WebSocket -> hiển thị overlay mạng chập chờn
+          reconnectManager.handleSelfDisconnect('WS_DISCONNECTED');
           setState((current) => ({
             ...current,
             connected: false,
@@ -146,6 +218,7 @@ export function useMatch(matchId) {
         });
         socket.addEventListener('error', () => {
           if (!cancelled) {
+            reconnectManager.handleSelfDisconnect('WS_ERROR');
             setState((current) => ({
               ...current,
               error: 'Không thể kết nối tới máy chủ thời gian thực.',
@@ -154,6 +227,7 @@ export function useMatch(matchId) {
         });
       } catch (error) {
         if (!cancelled && error.name !== 'AbortError') {
+          reconnectManager.handleSelfDisconnect('FETCH_FAILED');
           setState((current) => ({
             ...current,
             loading: false,
@@ -174,21 +248,58 @@ export function useMatch(matchId) {
       socket?.close();
       socketRef.current = null;
       pendingRef.current = false;
+      reconnectManager.destroy();
     };
-  }, [matchId]);
+  }, [matchId, reconnectManager]);
 
   const sendMove = useCallback((from, to) => {
+    // COT-601 AC 2: Khóa toàn bộ thao tác gửi nước đi khi đang mất kết nối
+    if (!reconnectManager.canMakeMove()) {
+      return false;
+    }
     const socket = socketRef.current;
     if (!socket || socket.readyState !== WebSocket.OPEN || pendingRef.current) return false;
     pendingRef.current = true;
     setState((current) => ({ ...current, movePending: true, moveError: null, moveResult: null }));
     socket.send(JSON.stringify({ type: 'move', from, to }));
     return true;
-  }, []);
+  }, [reconnectManager]);
 
   const clearMoveError = useCallback(() => {
     setState((current) => ({ ...current, moveError: null }));
   }, []);
 
-  return { ...state, sendMove, clearMoveError };
+  // Các hàm hỗ trợ mô phỏng test hoặc tương tác thủ công
+  const simulateSelfDisconnect = useCallback(() => {
+    return reconnectManager.handleSelfDisconnect('MANUAL_SIMULATION');
+  }, [reconnectManager]);
+
+  const simulateSelfReconnect = useCallback(() => {
+    return reconnectManager.handleSelfReconnect();
+  }, [reconnectManager]);
+
+  const simulateOpponentDisconnect = useCallback((seconds = 60) => {
+    return reconnectManager.handleOpponentDisconnect({ countdownSeconds: seconds });
+  }, [reconnectManager]);
+
+  const simulateOpponentReconnect = useCallback(() => {
+    return reconnectManager.handleOpponentReconnect();
+  }, [reconnectManager]);
+
+  const simulateServerMatchResult = useCallback((result) => {
+    return reconnectManager.handleServerMatchResult(result);
+  }, [reconnectManager]);
+
+  return {
+    ...state,
+    sendMove,
+    clearMoveError,
+    reconnectState,
+    reconnectManager,
+    simulateSelfDisconnect,
+    simulateSelfReconnect,
+    simulateOpponentDisconnect,
+    simulateOpponentReconnect,
+    simulateServerMatchResult,
+  };
 }
