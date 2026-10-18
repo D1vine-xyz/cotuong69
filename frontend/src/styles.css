@@ -778,3 +778,476 @@ button { color: inherit; }
   .check-alert > span:last-child { flex-basis: 100%; margin-left: 30px; }
   .captured-trays { grid-template-columns: minmax(0, 1fr); }
 }
+
+/* ==========================================================================
+   COT-601: Giao diện Cảnh báo Mạng chập chờn & Đếm ngược Kết nối lại 60s
+   ========================================================================== */
+
+/* 1. Banner đối thủ mất kết nối */
+.opponent-disconnect-banner {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  margin: -6px 0 16px;
+  padding: 12px 18px;
+  border: 1px solid rgba(245, 158, 11, 0.6);
+  border-radius: 9px;
+  background: linear-gradient(100deg, rgba(78, 48, 12, 0.95), rgba(39, 26, 10, 0.92));
+  color: #fde68a;
+  box-shadow: 0 0 28px rgba(245, 158, 11, 0.22);
+  animation: slideBannerDown 0.3s ease-out;
+}
+
+.opponent-disconnect-banner.banner-waiting-server {
+  border-color: rgba(99, 102, 241, 0.6);
+  background: linear-gradient(100deg, rgba(30, 27, 75, 0.95), rgba(17, 24, 39, 0.92));
+  color: #c7d2fe;
+  box-shadow: 0 0 28px rgba(99, 102, 241, 0.22);
+}
+
+.banner-left-content {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+}
+
+.banner-pulse-icon {
+  display: grid;
+  place-items: center;
+  width: 38px;
+  height: 38px;
+  flex: none;
+  font-size: 20px;
+  border-radius: 50%;
+  background: rgba(245, 158, 11, 0.18);
+  border: 1px solid rgba(245, 158, 11, 0.4);
+  animation: pulseIcon 1.5s infinite;
+}
+
+.banner-texts {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.banner-title-line {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.banner-title-line strong {
+  font-size: 14px;
+  font-weight: 700;
+  color: #fff;
+  letter-spacing: 0.02em;
+}
+
+.banner-status-tag {
+  display: inline-block;
+  padding: 2px 7px;
+  border-radius: 4px;
+  font-size: 10px;
+  font-weight: 600;
+  background: rgba(245, 158, 11, 0.25);
+  border: 1px solid rgba(245, 158, 11, 0.45);
+  color: #fbbf24;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+}
+
+.banner-subtext {
+  margin: 0;
+  font-size: 12px;
+  color: #fef3c7;
+  opacity: 0.9;
+}
+
+/* Đồng hồ đếm ngược 60 giây hình tròn */
+.banner-timer-badge {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 2px;
+  flex: none;
+}
+
+.timer-badge-label {
+  font-size: 9px;
+  font-weight: 700;
+  color: #f59e0b;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+
+.timer-circle-box {
+  display: flex;
+  align-items: baseline;
+  justify-content: center;
+  gap: 2px;
+  min-width: 54px;
+  padding: 5px 10px;
+  border-radius: 8px;
+  background: rgba(16, 21, 23, 0.75);
+  border: 1px solid rgba(245, 158, 11, 0.5);
+  box-shadow: inset 0 0 12px rgba(245, 158, 11, 0.2);
+}
+
+.timer-number {
+  font-family: "Cinzel", Georgia, serif;
+  font-size: 22px;
+  font-weight: 700;
+  color: #fef08a;
+  text-shadow: 0 0 10px rgba(245, 158, 11, 0.6);
+}
+
+.timer-sec {
+  font-size: 11px;
+  font-weight: 600;
+  color: #f59e0b;
+}
+
+.banner-waiting-badge {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 6px 12px;
+  border-radius: 6px;
+  background: rgba(99, 102, 241, 0.2);
+  border: 1px solid rgba(99, 102, 241, 0.4);
+  color: #e0e7ff;
+  font-size: 11px;
+  font-weight: 600;
+}
+
+.server-spinner {
+  width: 14px;
+  height: 14px;
+  border: 2px solid rgba(199, 210, 254, 0.3);
+  border-top-color: #818cf8;
+  border-radius: 50%;
+  animation: spin 0.8s linear infinite;
+}
+
+/* 2. Overlay mạng chập chờn khi chính người dùng mất kết nối */
+.board-shell {
+  position: relative; /* Cho overlay absolute */
+}
+
+.reconnecting-overlay {
+  position: absolute;
+  inset: 0;
+  z-index: 100;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: rgba(14, 18, 20, 0.91);
+  backdrop-filter: blur(9px);
+  border-radius: inherit;
+  padding: 24px;
+  box-sizing: border-box;
+  animation: fadeInOverlay 0.25s ease-out;
+}
+
+.reconnecting-card {
+  max-width: 440px;
+  width: 100%;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  text-align: center;
+  padding: 30px 24px;
+  border-radius: 14px;
+  background: linear-gradient(135deg, rgba(29, 36, 40, 0.96), rgba(20, 26, 29, 0.98));
+  border: 1px solid rgba(234, 179, 8, 0.35);
+  box-shadow: 0 16px 48px rgba(0, 0, 0, 0.65), 0 0 32px rgba(234, 179, 8, 0.15);
+}
+
+.reconnecting-radar {
+  position: relative;
+  width: 72px;
+  height: 72px;
+  display: grid;
+  place-items: center;
+  margin-bottom: 18px;
+}
+
+.radar-circle {
+  position: absolute;
+  inset: 0;
+  border-radius: 50%;
+  border: 2px solid rgba(234, 179, 8, 0.6);
+  opacity: 0;
+  animation: radarWave 2s cubic-bezier(0.2, 0.8, 0.4, 1) infinite;
+}
+
+.radar-circle.circle-2 {
+  animation-delay: 0.6s;
+}
+
+.radar-circle.circle-3 {
+  animation-delay: 1.2s;
+}
+
+.radar-icon {
+  font-size: 32px;
+  z-index: 2;
+  filter: drop-shadow(0 0 10px rgba(234, 179, 8, 0.6));
+}
+
+.reconnecting-title {
+  margin: 0 0 10px;
+  font-family: "Cinzel", Georgia, serif;
+  font-size: 18px;
+  font-weight: 700;
+  color: #fef08a;
+  text-shadow: 0 0 14px rgba(234, 179, 8, 0.3);
+  letter-spacing: 0.03em;
+}
+
+.reconnecting-desc {
+  margin: 0 0 18px;
+  font-size: 13px;
+  line-height: 1.6;
+  color: #cbd5e1;
+}
+
+.reconnecting-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  padding: 6px 14px;
+  border-radius: 20px;
+  background: rgba(239, 68, 68, 0.15);
+  border: 1px solid rgba(239, 68, 68, 0.4);
+  color: #fca5a5;
+  font-size: 11px;
+  font-weight: 600;
+  margin-bottom: 18px;
+}
+
+.reconnecting-progress {
+  width: 100%;
+  height: 4px;
+  border-radius: 2px;
+  background: rgba(255, 255, 255, 0.08);
+  overflow: hidden;
+  position: relative;
+}
+
+.progress-bar-glow {
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  width: 40%;
+  background: linear-gradient(90deg, transparent, #eab308, #fef08a, transparent);
+  animation: progressGlow 1.5s ease-in-out infinite;
+}
+
+/* 3. Tạm dừng đồng hồ lượt đi thông thường */
+.player-card.player-card-paused {
+  border-color: rgba(245, 158, 11, 0.35);
+  background: linear-gradient(135deg, rgba(29, 36, 40, 0.65), rgba(45, 34, 18, 0.4));
+}
+
+.turn-chip.turn-chip-paused {
+  background: rgba(245, 158, 11, 0.25);
+  color: #fde68a;
+  border: 1px solid rgba(245, 158, 11, 0.5);
+  animation: blinkChip 1.5s infinite;
+}
+
+.player-clock.clock-paused {
+  border-color: rgba(245, 158, 11, 0.4);
+  background: rgba(45, 34, 18, 0.5);
+  color: #fde68a;
+}
+
+.clock-pause-tag {
+  display: block;
+  font-size: 8px;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  color: #fbbf24;
+  margin-top: 2px;
+}
+
+.pulse-paused {
+  background: #f59e0b !important;
+  animation: pulseAmber 1.2s infinite !important;
+}
+
+.fact-warning {
+  border-top: 1px solid rgba(245, 158, 11, 0.2);
+  padding-top: 8px;
+}
+
+.text-warning {
+  color: #fbbf24 !important;
+}
+
+/* 4. Modal kết quả ván đấu do Máy chủ trả về (AC 3) */
+.match-result-modal-overlay {
+  position: fixed;
+  inset: 0;
+  z-index: 1000;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: rgba(10, 13, 14, 0.88);
+  backdrop-filter: blur(10px);
+  padding: 20px;
+  animation: fadeInOverlay 0.3s ease-out;
+}
+
+.match-result-card {
+  max-width: 480px;
+  width: 100%;
+  border-radius: 14px;
+  background: linear-gradient(135deg, #1b2326, #141b1d);
+  border: 1px solid rgba(210, 180, 110, 0.45);
+  box-shadow: 0 20px 60px rgba(0, 0, 0, 0.8), 0 0 35px rgba(210, 180, 110, 0.2);
+  padding: 30px 26px;
+  text-align: center;
+  animation: scaleUp 0.3s cubic-bezier(0.16, 1, 0.3, 1);
+}
+
+.result-header {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 8px;
+  margin-bottom: 20px;
+}
+
+.result-trophy-icon {
+  font-size: 42px;
+  filter: drop-shadow(0 0 12px rgba(234, 179, 8, 0.5));
+}
+
+.result-header h3 {
+  margin: 0;
+  font-family: "Cinzel", Georgia, serif;
+  font-size: 22px;
+  font-weight: 700;
+  color: #fef08a;
+  letter-spacing: 0.08em;
+}
+
+.server-confirmed-badge {
+  display: inline-block;
+  padding: 3px 10px;
+  border-radius: 12px;
+  background: rgba(34, 197, 94, 0.18);
+  border: 1px solid rgba(34, 197, 94, 0.4);
+  color: #86efac;
+  font-size: 11px;
+  font-weight: 600;
+}
+
+.result-winner-box {
+  padding: 16px;
+  border-radius: 9px;
+  background: rgba(12, 16, 17, 0.6);
+  border: 1px solid rgba(210, 180, 110, 0.25);
+  margin-bottom: 14px;
+}
+
+.result-message-text {
+  font-size: 15px;
+  line-height: 1.5;
+  color: #fff;
+}
+
+.result-rule-note {
+  font-size: 12px;
+  color: #94a3b8;
+  line-height: 1.6;
+  margin: 0 0 24px;
+}
+
+.result-actions {
+  display: flex;
+  justify-content: center;
+}
+
+/* 5. Nhóm công cụ kiểm thử / giả lập mạng (Simulation Dev Tools) */
+.simulation-tools-group {
+  margin-top: 14px;
+  padding-top: 14px;
+  border-top: 1px solid rgba(143, 156, 147, 0.2);
+  display: flex;
+  flex-direction: column;
+  gap: 7px;
+}
+
+.simulation-title {
+  font-size: 10px;
+  font-weight: 700;
+  color: #eab308;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  margin-bottom: 3px;
+}
+
+.btn-sim {
+  padding: 6px 10px;
+  border-radius: 5px;
+  font-size: 11px;
+  font-weight: 600;
+  text-align: left;
+  background: rgba(255, 255, 255, 0.05);
+  border: 1px solid rgba(255, 255, 255, 0.15);
+  color: #e2e8f0;
+  cursor: pointer;
+  transition: all 0.2s;
+}
+
+.btn-sim:hover {
+  background: rgba(234, 179, 8, 0.15);
+  border-color: rgba(234, 179, 8, 0.4);
+  color: #fef08a;
+}
+
+/* Animations */
+@keyframes slideBannerDown {
+  from { opacity: 0; transform: translateY(-12px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+
+@keyframes pulseIcon {
+  0%, 100% { transform: scale(1); box-shadow: 0 0 0 0 rgba(245, 158, 11, 0.4); }
+  50% { transform: scale(1.06); box-shadow: 0 0 12px 4px rgba(245, 158, 11, 0.25); }
+}
+
+@keyframes pulseAmber {
+  0%, 100% { transform: scale(1); opacity: 1; }
+  50% { transform: scale(1.4); opacity: 0.4; }
+}
+
+@keyframes blinkChip {
+  0%, 100% { opacity: 1; }
+  50% { opacity: 0.55; }
+}
+
+@keyframes radarWave {
+  0% { transform: scale(0.4); opacity: 0.8; }
+  100% { transform: scale(1.4); opacity: 0; }
+}
+
+@keyframes progressGlow {
+  0% { left: -40%; }
+  100% { left: 100%; }
+}
+
+@keyframes fadeInOverlay {
+  from { opacity: 0; }
+  to { opacity: 1; }
+}
+
+@keyframes scaleUp {
+  from { opacity: 0; transform: scale(0.92); }
+  to { opacity: 1; transform: scale(1); }
+}
+
