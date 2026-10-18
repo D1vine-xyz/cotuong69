@@ -211,6 +211,39 @@
               </a>
             </div>
           </div>
+        <!-- COT-630: Khung Chat Text Giữa Hai Kỳ Thủ Trong Phòng -->
+        <div class="room-chat-section" id="roomChatSection" style="display: none;">
+          <div class="section-divider">
+            <span>Khung Chat Nội Bộ (Chủ Phòng & Đối Thủ)</span>
+          </div>
+          <div class="chat-embedded-wrapper" id="roomChatEmbeddedWrapper">
+            <div class="chat-messages-container" id="roomModalChatMessages">
+              <div class="chat-bubble-system">
+                <span class="system-pill">Chào mừng bạn! Khung chat chỉ hiển thị riêng giữa Chủ phòng và Đối thủ.</span>
+              </div>
+            </div>
+            <form class="chat-input-area" id="roomModalChatForm">
+              <div id="roomChatErrorTooltip" class="chat-error-tooltip" style="display: none;" role="alert"></div>
+              <div class="chat-input-wrapper">
+                <input 
+                  type="text" 
+                  id="roomChatInput" 
+                  class="chat-text-input" 
+                  placeholder="Nhắn tin cho đối thủ... (Enter để gửi)" 
+                  maxlength="265"
+                  autocomplete="off"
+                >
+                <button type="submit" id="roomChatSendBtn" class="btn-chat-send" title="Gửi tin nhắn">
+                  <span>Gửi</span>
+                  <span class="send-arrow">➤</span>
+                </button>
+              </div>
+              <div class="chat-input-footer">
+                <span class="chat-hint">Chỉ 2 kỳ thủ xem được</span>
+                <span class="chat-char-counter" id="roomChatCharCounter">0/255</span>
+              </div>
+            </form>
+          </div>
         </div>
 
       </div>
@@ -401,6 +434,58 @@
             <span class="btn-spinner" id="loginSpinner" style="display: none;"></span>
             <span id="loginBtnText">Đăng Nhập & Vào Phòng</span>
           </button>
+        </div>
+      </form>
+    </div>
+  </div>
+
+  <!-- COT-630: Floating Chat Widget -->
+  <div class="chat-box-widget" id="floatingChatWidget" style="display: none;">
+    <!-- Nút mở chat -->
+    <button type="button" id="floatingOpenChatBtn" class="chat-floating-toggle-btn" title="Mở khung chat (COT-630)">
+      <span class="chat-toggle-icon">💬</span>
+      <span class="chat-toggle-label">Khung Chat</span>
+      <span class="chat-unread-badge" id="floatingChatUnread" style="display: none;">0</span>
+    </button>
+
+    <!-- Khung chat mở rộng -->
+    <div class="chat-panel-card" id="floatingChatPanel" style="display: none;" role="region" aria-label="Khung chat hai kỳ thủ">
+      <div class="chat-panel-header">
+        <div class="chat-panel-title">
+          <span class="chat-title-icon">💬</span>
+          <div>
+            <strong id="floatingChatRoomTitle">Khung Chat Trận Đấu</strong>
+            <span class="chat-subtitle">Chỉ Chủ phòng & Đối thủ nhìn thấy</span>
+          </div>
+        </div>
+        <button type="button" id="floatingCloseChatBtn" class="chat-minimize-btn" title="Thu nhỏ">✕</button>
+      </div>
+
+      <div class="chat-messages-container" id="floatingChatMessages">
+        <div class="chat-bubble-system">
+          <span class="system-pill">Chào mừng! Khung chat nội bộ chỉ giữa Chủ phòng và Đối thủ.</span>
+        </div>
+      </div>
+
+      <form class="chat-input-area" id="floatingChatForm">
+        <div id="floatingChatError" class="chat-error-tooltip" style="display: none;" role="alert"></div>
+        <div class="chat-input-wrapper">
+          <input 
+            type="text" 
+            id="floatingChatInput" 
+            class="chat-text-input" 
+            placeholder="Nhập tin nhắn... (Enter để gửi)" 
+            maxlength="265"
+            autocomplete="off"
+          >
+          <button type="submit" id="floatingChatSendBtn" class="btn-chat-send" title="Gửi tin nhắn">
+            <span>Gửi</span>
+            <span class="send-arrow">➤</span>
+          </button>
+        </div>
+        <div class="chat-input-footer">
+          <span class="chat-hint">Nhấn Enter để gửi</span>
+          <span class="chat-char-counter" id="floatingCharCounter">0/255</span>
         </div>
       </form>
     </div>

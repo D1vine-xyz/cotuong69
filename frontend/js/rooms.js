@@ -110,6 +110,30 @@ document.addEventListener('DOMContentLoaded', () => {
   // Toast Container
   const toastContainer = document.getElementById('toastContainer');
 
+  // COT-630: Chat DOM Elements & State
+  const roomChatSection = document.getElementById('roomChatSection');
+  const roomModalChatMessages = document.getElementById('roomModalChatMessages');
+  const roomModalChatForm = document.getElementById('roomModalChatForm');
+  const roomChatInput = document.getElementById('roomChatInput');
+  const roomChatSendBtn = document.getElementById('roomChatSendBtn');
+  const roomChatCharCounter = document.getElementById('roomChatCharCounter');
+  const roomChatErrorTooltip = document.getElementById('roomChatErrorTooltip');
+
+  const floatingChatWidget = document.getElementById('floatingChatWidget');
+  const floatingOpenChatBtn = document.getElementById('floatingOpenChatBtn');
+  const floatingChatPanel = document.getElementById('floatingChatPanel');
+  const floatingCloseChatBtn = document.getElementById('floatingCloseChatBtn');
+  const floatingChatMessages = document.getElementById('floatingChatMessages');
+  const floatingChatForm = document.getElementById('floatingChatForm');
+  const floatingChatInput = document.getElementById('floatingChatInput');
+  const floatingChatSendBtn = document.getElementById('floatingChatSendBtn');
+  const floatingCharCounter = document.getElementById('floatingCharCounter');
+  const floatingChatError = document.getElementById('floatingChatError');
+  const floatingChatUnread = document.getElementById('floatingChatUnread');
+  const floatingChatRoomTitle = document.getElementById('floatingChatRoomTitle');
+
+  let activeChatService = null;
+
   /**
    * Khởi tạo ứng dụng
    */
@@ -245,6 +269,34 @@ document.addEventListener('DOMContentLoaded', () => {
     if (friendInviteModal) {
       friendInviteModal.addEventListener('click', (e) => {
         if (e.target === friendInviteModal) closeFriendInviteModal();
+      });
+    }
+
+    // COT-630: Chat Event Listeners
+    if (floatingOpenChatBtn) {
+      floatingOpenChatBtn.addEventListener('click', toggleFloatingChat);
+    }
+    if (floatingCloseChatBtn) {
+      floatingCloseChatBtn.addEventListener('click', toggleFloatingChat);
+    }
+    if (roomModalChatForm) {
+      roomModalChatForm.addEventListener('submit', handleRoomChatSubmit);
+    }
+    if (floatingChatForm) {
+      floatingChatForm.addEventListener('submit', handleFloatingChatSubmit);
+    }
+    if (roomChatInput) {
+      roomChatInput.addEventListener('input', (e) => {
+        const len = e.target.value.length;
+        if (roomChatCharCounter) roomChatCharCounter.textContent = `${len}/255`;
+        if (roomChatErrorTooltip) roomChatErrorTooltip.style.display = 'none';
+      });
+    }
+    if (floatingChatInput) {
+      floatingChatInput.addEventListener('input', (e) => {
+        const len = e.target.value.length;
+        if (floatingCharCounter) floatingCharCounter.textContent = `${len}/255`;
+        if (floatingChatError) floatingChatError.style.display = 'none';
       });
     }
 
@@ -566,10 +618,16 @@ document.addEventListener('DOMContentLoaded', () => {
     if (shareZaloBtn) shareZaloBtn.href = shareLinks.zaloUrl;
 
     roomModal.style.display = 'flex';
+
+    // COT-630: Khởi tạo khung chat và kiểm tra phân quyền hiển thị (AC 2 & AC 3)
+    setupRoomChat(room, role);
   }
 
   function closeModal() {
     roomModal.style.display = 'none';
+    if (floatingChatWidget && (!activeChatService || !activeChatService.isChatAllowed())) {
+      floatingChatWidget.style.display = 'none';
+    }
   }
 
   /**
@@ -1160,6 +1218,178 @@ document.addEventListener('DOMContentLoaded', () => {
       // AC 3: Báo lỗi "Room không còn khả dụng"
       showToast(err.message || 'Room không còn khả dụng.', 'error');
     }
+  }
+
+  /**
+   * ===================================================================
+   * COT-630: Code giao diện Khung chat text và phân quyền hiển thị
+   * ===================================================================
+   */
+
+  function setupRoomChat(room, role) {
+    const roleUpper = String(role || '').toUpperCase();
+    const isPlayerOrHost = roleUpper === 'HOST' || roleUpper === 'PLAYER';
+
+    // AC 3: Khán giả hoàn toàn bị ẩn khung chat và không can thiệp được
+    if (!isPlayerOrHost) {
+      if (roomChatSection) roomChatSection.style.display = 'none';
+      if (floatingChatWidget) floatingChatWidget.style.display = 'none';
+      if (activeChatService) {
+        activeChatService.setRole('SPECTATOR');
+      }
+      return;
+    }
+
+    // Hiển thị khung chat cho Chủ phòng & Đối thủ (AC 2)
+    if (roomChatSection) roomChatSection.style.display = 'block';
+    if (floatingChatWidget) floatingChatWidget.style.display = 'block';
+    if (floatingChatRoomTitle) floatingChatRoomTitle.textContent = `Chat · #${room.code}`;
+
+    const currentUser = (apiService && apiService.getCurrentUser ? apiService.getCurrentUser() : null) || {
+      id: 'usr_sang',
+      name: 'Nguyễn Tấn Sang',
+      avatar: '桑',
+      role: roleUpper
+    };
+
+    currentUser.role = roleUpper;
+
+    if (!activeChatService || activeChatService.roomId !== room.code) {
+      if (typeof window.ChatService === 'function') {
+        activeChatService = new window.ChatService({
+          roomId: room.code,
+          currentUser: currentUser
+        });
+      }
+    } else {
+      activeChatService.setRole(roleUpper);
+    }
+
+    if (activeChatService) {
+      activeChatService.onChatEvent((event) => {
+        if (event.type === 'MESSAGE_ADDED' || event.type === 'MESSAGE_RECEIVED' || event.type === 'MESSAGE_STATUS_UPDATED') {
+          renderChatMessages();
+        } else if (event.type === 'CHAT_TOGGLED') {
+          updateFloatingChatState();
+        }
+      });
+      renderChatMessages();
+    }
+  }
+
+  function renderChatMessages() {
+    if (!activeChatService) return;
+    const messages = activeChatService.getMessages();
+
+    const renderList = (container) => {
+      if (!container) return;
+      container.innerHTML = messages.map(msg => {
+        if (msg.isSystem) {
+          return `
+            <div class="chat-bubble-system">
+              <span class="system-pill">${escapeHtml(msg.text)}</span>
+            </div>
+          `;
+        }
+
+        const isSelf = msg.isSelf;
+        const statusHtml = isSelf ? `
+          <div class="chat-bubble-status">
+            ${msg.status === 'SENDING' ? '<span class="status-sending">⏳ Đang gửi</span>' : ''}
+            ${msg.status === 'SENT' ? '<span class="status-sent">✓ Đã gửi</span>' : ''}
+            ${msg.status === 'FAILED' ? '<span class="status-failed">⚠️ Thất bại</span>' : ''}
+          </div>
+        ` : '';
+
+        return `
+          <div class="chat-message-row ${isSelf ? 'message-self' : 'message-opponent'}">
+            <div class="chat-bubble-avatar ${isSelf ? 'avatar-self' : 'avatar-opponent'}">
+              ${msg.senderAvatar || (msg.senderName ? msg.senderName.slice(0, 1) : '?')}
+            </div>
+            <div class="chat-bubble-content">
+              <div class="chat-bubble-meta">
+                <span class="chat-sender-name">${escapeHtml(msg.senderName)}</span>
+                <span class="chat-timestamp">${msg.timestamp}</span>
+              </div>
+              <div class="chat-bubble-bubble">
+                <p class="chat-bubble-text">${escapeHtml(msg.text)}</p>
+              </div>
+              ${statusHtml}
+            </div>
+          </div>
+        `;
+      }).join('');
+
+      // AC 1: Tự động cuộn xuống dưới cùng
+      container.scrollTop = container.scrollHeight;
+    };
+
+    renderList(roomModalChatMessages);
+    renderList(floatingChatMessages);
+  }
+
+  function toggleFloatingChat() {
+    if (!activeChatService || !activeChatService.isChatAllowed()) return;
+    activeChatService.toggleChat();
+    updateFloatingChatState();
+  }
+
+  function updateFloatingChatState() {
+    if (!activeChatService) return;
+    const isOpen = activeChatService.isOpen;
+    if (floatingOpenChatBtn) floatingOpenChatBtn.style.display = isOpen ? 'none' : 'flex';
+    if (floatingChatPanel) {
+      floatingChatPanel.style.display = isOpen ? 'flex' : 'none';
+      if (isOpen) {
+        if (floatingChatInput) floatingChatInput.focus();
+        if (floatingChatMessages) floatingChatMessages.scrollTop = floatingChatMessages.scrollHeight;
+      }
+    }
+  }
+
+  async function handleRoomChatSubmit(e) {
+    if (e) e.preventDefault();
+    if (!activeChatService) return;
+    const text = roomChatInput ? roomChatInput.value : '';
+
+    try {
+      if (roomChatErrorTooltip) roomChatErrorTooltip.style.display = 'none';
+      await activeChatService.sendMessage(text);
+      if (roomChatInput) roomChatInput.value = '';
+      if (roomChatCharCounter) roomChatCharCounter.textContent = '0/255';
+    } catch (err) {
+      if (roomChatErrorTooltip) {
+        roomChatErrorTooltip.textContent = `⚠️ ${err.message}`;
+        roomChatErrorTooltip.style.display = 'block';
+      }
+    }
+  }
+
+  async function handleFloatingChatSubmit(e) {
+    if (e) e.preventDefault();
+    if (!activeChatService) return;
+    const text = floatingChatInput ? floatingChatInput.value : '';
+
+    try {
+      if (floatingChatError) floatingChatError.style.display = 'none';
+      await activeChatService.sendMessage(text);
+      if (floatingChatInput) floatingChatInput.value = '';
+      if (floatingCharCounter) floatingCharCounter.textContent = '0/255';
+    } catch (err) {
+      if (floatingChatError) {
+        floatingChatError.textContent = `⚠️ ${err.message}`;
+        floatingChatError.style.display = 'block';
+      }
+    }
+  }
+
+  function escapeHtml(str) {
+    return String(str)
+      .replace(/&/g, '&amp;')
+      .replace(/</g, '&lt;')
+      .replace(/>/g, '&gt;')
+      .replace(/"/g, '&quot;')
+      .replace(/'/g, '&#039;');
   }
 
   // Khởi chạy
