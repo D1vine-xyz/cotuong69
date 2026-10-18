@@ -121,6 +121,116 @@ class RoomApiService {
     // Sử dụng in-memory mock store
     this.roomsStore = JSON.parse(JSON.stringify(INITIAL_PUBLIC_ROOMS));
     this.realtimeListeners = [];
+    // Thông tin người dùng hiện tại (mặc định đã đăng nhập theo session)
+    this.currentUser = {
+      id: 'user-sang-01',
+      username: 'nguyen_tan_sang',
+      displayName: 'Nguyễn Tấn Sang',
+      elo: 1250,
+      isLoggedIn: true
+    };
+  }
+
+  /**
+   * Lấy thông tin người dùng đang đăng nhập
+   */
+  getCurrentUser() {
+    return this.currentUser && this.currentUser.isLoggedIn ? this.currentUser : null;
+  }
+
+  /**
+   * Thiết lập thông tin người dùng (cho việc test / mock session)
+   */
+  setCurrentUser(user) {
+    this.currentUser = user;
+  }
+
+  /**
+   * Tạo phòng chơi mới (Công khai hoặc Riêng tư) - COT-598
+   * Tiêu chí chấp nhận 1: Form có Tên Room và lựa chọn Công khai/Riêng tư.
+   * Tiêu chí chấp nhận 2: Không gửi request nếu Tên Room để trống hoặc không hợp lệ.
+   * Tiêu chí chấp nhận 3: Không tạo nhiều phòng do bấm liên tục.
+   * Tiêu chí chấp nhận 4: Tạo thành công đưa người dùng vào phòng với vai trò Chủ phòng.
+   */
+  async createRoom({ name, isPrivate = false, password = null, maxSpectators = 10 } = {}) {
+    // 1. Chỉ cho phép người dùng đã đăng nhập tạo phòng
+    const user = this.getCurrentUser();
+    if (!user) {
+      const err = new Error('Yêu cầu đăng nhập để tạo phòng.');
+      err.code = 'UNAUTHORIZED';
+      throw err;
+    }
+
+    // 2. Kiểm tra Tên Room (bắt buộc, không để trống, kiểm tra độ dài 3-50 ký tự)
+    if (name === undefined || name === null || typeof name !== 'string') {
+      const err = new Error('Tên phòng không được để trống.');
+      err.code = 'INVALID_NAME';
+      throw err;
+    }
+
+    const trimmedName = name.trim();
+    if (!trimmedName) {
+      const err = new Error('Tên phòng không được để trống.');
+      err.code = 'INVALID_NAME';
+      throw err;
+    }
+
+    if (trimmedName.length < 3 || trimmedName.length > 50) {
+      const err = new Error('Tên phòng phải có độ dài từ 3 đến 50 ký tự.');
+      err.code = 'INVALID_NAME_LENGTH';
+      throw err;
+    }
+
+    // 3. Sinh mã phòng 6 chữ số duy nhất
+    let code;
+    let attempts = 0;
+    do {
+      code = Math.floor(100000 + Math.random() * 900000).toString();
+      attempts++;
+    } while (this.roomsStore.some(r => r.code === code) && attempts < 100);
+
+    const isPublic = !Boolean(isPrivate);
+    const newRoom = {
+      code,
+      name: trimmedName,
+      hostId: user.id || 'user-host',
+      hostName: user.displayName || user.username || 'Chủ phòng',
+      hostElo: user.elo || 1200,
+      opponentId: null,
+      opponentName: null,
+      status: 'WAITING_OPPONENT',
+      playerCount: 1,
+      maxPlayers: 2,
+      spectatorCount: 0,
+      maxSpectators,
+      timeControl: '15m + 10s',
+      isPublic,
+      isPrivate: Boolean(isPrivate),
+      password: password && String(password).trim() ? String(password).trim() : null,
+      createdAt: new Date().toISOString()
+    };
+
+    this.roomsStore.unshift(newRoom);
+
+    // Phát sự kiện realtime cho sảnh chờ nếu là phòng công khai
+    if (isPublic) {
+      const eventPayload = {
+        type: 'ROOM_CREATED',
+        room: newRoom,
+        roomCode: code
+      };
+      this.realtimeListeners.forEach(listener => {
+        try { listener(eventPayload); } catch (e) { console.error(e); }
+      });
+    }
+
+    return {
+      success: true,
+      message: 'Tạo phòng cờ thành công.',
+      room: newRoom,
+      role: 'HOST',
+      roleMessage: 'Bạn là Chủ phòng! Vị trí Đối thủ đang trống, hãy mời kỳ thủ vào thi đấu.'
+    };
   }
 
   /**

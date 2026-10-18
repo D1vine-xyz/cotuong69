@@ -135,12 +135,12 @@
   <!-- Notification Toast -->
   <div id="toastContainer" class="toast-container" aria-live="polite"></div>
 
-  <!-- Room Navigation / Join Success Modal -->
+  <!-- Room Navigation / Join & Host Modal -->
   <div id="roomModal" class="modal-overlay" style="display: none;">
     <div class="modal-card">
       <div class="modal-header">
-        <h3 id="modalRoomTitle">Tham Gia Phòng Thi Đấu</h3>
-        <button id="closeModalBtn" class="close-btn">&times;</button>
+        <h3 id="modalRoomTitle">Thông Tin Phòng Thi Đấu</h3>
+        <button id="closeModalBtn" class="close-btn" aria-label="Đóng">&times;</button>
       </div>
       <div class="modal-body">
         <div class="modal-room-info">
@@ -149,23 +149,119 @@
             <strong id="modalRoomCode" class="room-code-tag">------</strong>
           </div>
           <div class="info-row">
+            <span class="label">Tên phòng:</span>
+            <span id="modalRoomName">--</span>
+          </div>
+          <div class="info-row">
             <span class="label">Chủ phòng:</span>
             <span id="modalHostName">--</span>
+          </div>
+          <div class="info-row" id="modalOpponentRow">
+            <span class="label">Vị trí Đối thủ:</span>
+            <span id="modalOpponentName" class="opponent-badge empty-slot">Đang trống (Chờ kỳ thủ ghép trận)</span>
           </div>
           <div class="info-row">
             <span class="label">Trạng thái:</span>
             <span id="modalRoomStatus" class="status-badge">--</span>
           </div>
           <div class="info-row">
-            <span class="label">Vai trò được xếp:</span>
+            <span class="label">Vai trò của bạn:</span>
             <span id="modalUserRole" class="role-badge">--</span>
           </div>
         </div>
-        <p class="role-description" id="modalRoleNotice">Bạn đang được kết nối vào phòng với vai trò kỳ thủ.</p>
+        <p class="role-description" id="modalRoleNotice">Bạn đang được kết nối vào phòng.</p>
       </div>
       <div class="modal-footer">
         <button id="enterRoomBtn" class="btn btn-primary btn-large">Vào Bàn Cờ Ngay</button>
       </div>
+    </div>
+  </div>
+
+  <!-- Create Room Modal (COT-598) -->
+  <div id="createRoomModal" class="modal-overlay" style="display: none;" role="dialog" aria-modal="true" aria-labelledby="createModalHeading">
+    <div class="modal-card modal-card-create">
+      <div class="modal-header">
+        <div class="modal-title-with-icon">
+          <span class="header-icon">🏯</span>
+          <h3 id="createModalHeading">Tạo Phòng Thi Đấu Mới</h3>
+        </div>
+        <button id="closeCreateRoomModalBtn" class="close-btn" aria-label="Đóng">&times;</button>
+      </div>
+
+      <form id="createRoomForm" class="create-room-form" novalidate>
+        <div class="modal-body">
+          <!-- Room Name Input -->
+          <div class="form-group">
+            <label for="roomNameInput" class="form-label">
+              Tên Phòng Cờ <span class="required-star">*</span>
+            </label>
+            <input 
+              type="text" 
+              id="roomNameInput" 
+              name="roomName" 
+              class="form-input" 
+              placeholder="Ví dụ: Kỳ Phùng Địch Thủ, Giao lưu cao thủ..." 
+              maxlength="50"
+              autocomplete="off"
+            >
+            <div id="roomNameError" class="input-error-msg" role="alert"></div>
+            <span class="input-hint">Độ dài từ 3 đến 50 ký tự</span>
+          </div>
+
+          <!-- Room Visibility: Public vs Private -->
+          <div class="form-group">
+            <label class="form-label">Chế Độ Phòng Chơi</label>
+            <div class="room-visibility-options">
+              <label class="visibility-card selected" id="optPublicLabel">
+                <input type="radio" name="roomVisibility" value="public" id="optPublic" checked>
+                <div class="card-content">
+                  <div class="card-icon">🌐</div>
+                  <div class="card-texts">
+                    <strong>Phòng Công Khai</strong>
+                    <span>Hiển thị trên sảnh chờ để mọi kỳ thủ có thể tìm và tham gia</span>
+                  </div>
+                </div>
+              </label>
+
+              <label class="visibility-card" id="optPrivateLabel">
+                <input type="radio" name="roomVisibility" value="private" id="optPrivate">
+                <div class="card-content">
+                  <div class="card-icon">🔒</div>
+                  <div class="card-texts">
+                    <strong>Phòng Riêng Tư</strong>
+                    <span>Ẩn khỏi danh sách, chỉ vào qua mã 6 số hoặc liên kết mời</span>
+                  </div>
+                </div>
+              </label>
+            </div>
+          </div>
+
+          <!-- Password (Optional for Private Room) -->
+          <div class="form-group" id="roomPasswordGroup" style="display: none;">
+            <label for="roomPasswordInput" class="form-label">
+              Mật Khẩu Phòng <span class="optional-tag">(Tùy chọn)</span>
+            </label>
+            <input 
+              type="password" 
+              id="roomPasswordInput" 
+              name="roomPassword" 
+              class="form-input" 
+              placeholder="Để trống nếu không đặt mật khẩu"
+              maxlength="20"
+              autocomplete="new-password"
+            >
+            <span class="input-hint">Người khác cần nhập mật khẩu này để vào thi đấu</span>
+          </div>
+        </div>
+
+        <div class="modal-footer">
+          <button type="button" id="cancelCreateRoomBtn" class="btn btn-secondary">Hủy Bỏ</button>
+          <button type="submit" id="submitCreateRoomBtn" class="btn btn-gold btn-large">
+            <span class="btn-spinner" id="createRoomSpinner" style="display: none;"></span>
+            <span id="createRoomBtnText">+ Tạo Phòng Ngay</span>
+          </button>
+        </div>
+      </form>
     </div>
   </div>
 

@@ -12,6 +12,8 @@ yarn-error.log*
 *.sqlite
 *.sqlite3
 *.log
+uploads/
+dist/
 
 # AI Agent Configuration & Rules (Không đưa lên GitHub)
 .agents/
