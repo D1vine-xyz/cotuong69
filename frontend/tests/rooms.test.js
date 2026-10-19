@@ -149,3 +149,160 @@ describe('Nghiệm thu Task COT-597: Giao diện Danh sách phòng và Tìm ki�
     );
   });
 });
+
+describe('Nghiệm thu Task COT-598: Code Modal Tạo phòng chơi (Công khai / Riêng tư)', () => {
+
+  // AC 1: Form có Tên Room và lựa chọn Công khai/Riêng tư
+  test('AC 1.1: Tạo phòng Công khai thành công và tự động hiển thị trên danh sách Public Rooms', async () => {
+    const api = new RoomApiService();
+    let realtimeEvent = null;
+
+    api.onRealtimeUpdate(event => {
+      realtimeEvent = event;
+    });
+
+    const res = await api.createRoom({
+      name: 'Kỳ Phùng Địch Thủ',
+      isPrivate: false
+    });
+
+    assert.strictEqual(res.success, true);
+    assert.strictEqual(res.room.name, 'Kỳ Phùng Địch Thủ');
+    assert.strictEqual(res.room.isPublic, true);
+    assert.strictEqual(res.room.isPrivate, false);
+    assert.strictEqual(res.room.status, 'WAITING_OPPONENT');
+    assert.strictEqual(res.role, 'HOST');
+
+    // Kiểm tra realtime event phát ra
+    assert.ok(realtimeEvent, 'Phòng công khai phải phát sự kiện ROOM_CREATED cho sảnh chờ');
+    assert.strictEqual(realtimeEvent.type, 'ROOM_CREATED');
+    assert.strictEqual(realtimeEvent.room.code, res.room.code);
+
+    // Kiểm tra phòng xuất hiện trong danh sách sảnh chờ
+    const publicRooms = await api.getPublicRooms();
+    const found = publicRooms.find(r => r.code === res.room.code);
+    assert.ok(found, 'Phòng công khai phải có mặt trong getPublicRooms()');
+  });
+
+  test('AC 1.2: Tạo phòng Riêng tư thành công, có mật khẩu tùy chọn và ẩn khỏi danh sách Public Rooms', async () => {
+    const api = new RoomApiService();
+
+    const res = await api.createRoom({
+      name: 'Phòng Thi Đấu Kín',
+      isPrivate: true,
+      password: 'secret_pin_123'
+    });
+
+    assert.strictEqual(res.success, true);
+    assert.strictEqual(res.room.name, 'Phòng Thi Đấu Kín');
+    assert.strictEqual(res.room.isPublic, false);
+    assert.strictEqual(res.room.isPrivate, true);
+    assert.strictEqual(res.room.password, 'secret_pin_123');
+    assert.strictEqual(res.role, 'HOST');
+
+    // Kiểm tra phòng riêng tư KHÔNG xuất hiện trên danh sách public
+    const publicRooms = await api.getPublicRooms();
+    const found = publicRooms.find(r => r.code === res.room.code);
+    assert.strictEqual(found, undefined, 'Phòng riêng tư không được xuất hiện trong danh sách Public Rooms');
+  });
+
+  // AC 2: Không gửi request nếu Tên Room để trống hoặc không hợp lệ
+  test('AC 2.1: Chặn và từ chối khi Tên Room để trống, null, hoặc toàn khoảng trắng', async () => {
+    const api = new RoomApiService();
+
+    // Để trống chuỗi rỗng
+    await assert.rejects(
+      async () => { await api.createRoom({ name: '' }); },
+      { message: 'Tên phòng không được để trống.', code: 'INVALID_NAME' }
+    );
+
+    // Toàn khoảng trắng
+    await assert.rejects(
+      async () => { await api.createRoom({ name: '     ' }); },
+      { message: 'Tên phòng không được để trống.', code: 'INVALID_NAME' }
+    );
+
+    // Null hoặc undefined
+    await assert.rejects(
+      async () => { await api.createRoom({ name: null }); },
+      { message: 'Tên phòng không được để trống.', code: 'INVALID_NAME' }
+    );
+    await assert.rejects(
+      async () => { await api.createRoom({}); },
+      { message: 'Tên phòng không được để trống.', code: 'INVALID_NAME' }
+    );
+  });
+
+  test('AC 2.2: Chặn và từ chối khi Tên Room có độ dài không hợp lệ (< 3 hoặc > 50 ký tự)', async () => {
+    const api = new RoomApiService();
+
+    // Dưới 3 ký tự
+    await assert.rejects(
+      async () => { await api.createRoom({ name: 'AB' }); },
+      { message: 'Tên phòng phải có độ dài từ 3 đến 50 ký tự.', code: 'INVALID_NAME_LENGTH' }
+    );
+
+    // Quá 50 ký tự
+    const longName = 'A'.repeat(51);
+    await assert.rejects(
+      async () => { await api.createRoom({ name: longName }); },
+      { message: 'Tên phòng phải có độ dài từ 3 đến 50 ký tự.', code: 'INVALID_NAME_LENGTH' }
+    );
+  });
+
+  test('AC 2.3: Chặn tạo phòng khi người dùng chưa đăng nhập (Chỉ hiển thị/cho phép user đăng nhập)', async () => {
+    const api = new RoomApiService();
+    // Giả lập người dùng chưa đăng nhập
+    api.setCurrentUser(null);
+
+    await assert.rejects(
+      async () => { await api.createRoom({ name: 'Phòng Vô Danh' }); },
+      { message: 'Yêu cầu đăng nhập để tạo phòng.', code: 'UNAUTHORIZED' }
+    );
+  });
+
+  // AC 3: Không tạo nhiều phòng do bấm liên tục (Chống duplicate request)
+  test('AC 3.1: Đảm bảo mỗi lần tạo phòng thành công sinh ra 1 phòng duy nhất với mã code riêng biệt', async () => {
+    const api = new RoomApiService();
+
+    const [roomA, roomB] = await Promise.all([
+      api.createRoom({ name: 'Bàn Đấu Alpha' }),
+      api.createRoom({ name: 'Bàn Đấu Beta' })
+    ]);
+
+    assert.notStrictEqual(roomA.room.code, roomB.room.code, 'Hai phòng tạo ra phải có mã code khác nhau');
+    assert.strictEqual(roomA.success, true);
+    assert.strictEqual(roomB.success, true);
+  });
+
+  // AC 4: Tạo thành công đưa người dùng vào phòng với vai trò Chủ phòng
+  test('AC 4.1: Người tạo phòng được gán vai trò Chủ phòng (HOST) và ghế Đối thủ đang trống', async () => {
+    const api = new RoomApiService();
+
+    const res = await api.createRoom({ name: 'Giao Lưu Cao Thủ' });
+
+    assert.strictEqual(res.role, 'HOST');
+    assert.strictEqual(res.room.status, 'WAITING_OPPONENT');
+    assert.strictEqual(res.room.playerCount, 1);
+    assert.strictEqual(res.room.maxPlayers, 2);
+    assert.strictEqual(res.room.opponentId, null, 'Vị trí đối thủ phải là null (đang trống)');
+    assert.strictEqual(res.room.opponentName, null, 'Tên đối thủ phải là null (chưa có người vào)');
+  });
+
+  test('AC 4.2: Mã phòng tạo ra phải đúng định dạng 6 chữ số và tìm kiếm/tham gia lại được', async () => {
+    const api = new RoomApiService();
+
+    const created = await api.createRoom({ name: 'Kiểm tra mã phòng 6 số' });
+    const code = created.room.code;
+
+    // Kiểm tra định dạng 6 chữ số
+    assert.match(code, /^\d{6}$/, 'Mã phòng phải gồm đúng 6 chữ số (0-9)');
+
+    // Kiểm tra người thứ 2 tham gia vào phòng vừa tạo bằng mã 6 số
+    const joinRes = await api.joinRoomByCode(code);
+    assert.strictEqual(joinRes.success, true);
+    assert.strictEqual(joinRes.room.code, code);
+    assert.strictEqual(joinRes.role, 'PLAYER', 'Người thứ hai tham gia phòng này được gán vai trò PLAYER');
+  });
+});
+

@@ -38,11 +38,35 @@ document.addEventListener('DOMContentLoaded', () => {
   const roomModal = document.getElementById('roomModal');
   const closeModalBtn = document.getElementById('closeModalBtn');
   const modalRoomCode = document.getElementById('modalRoomCode');
+  const modalRoomName = document.getElementById('modalRoomName');
   const modalHostName = document.getElementById('modalHostName');
+  const modalOpponentName = document.getElementById('modalOpponentName');
   const modalRoomStatus = document.getElementById('modalRoomStatus');
   const modalUserRole = document.getElementById('modalUserRole');
   const modalRoleNotice = document.getElementById('modalRoleNotice');
   const enterRoomBtn = document.getElementById('enterRoomBtn');
+
+  // COT-598: Create Room Modal Elements
+  const createRoomModalBtn = document.getElementById('createRoomModalBtn');
+  const emptyCreateBtn = document.getElementById('emptyCreateBtn');
+  const createRoomModal = document.getElementById('createRoomModal');
+  const closeCreateRoomModalBtn = document.getElementById('closeCreateRoomModalBtn');
+  const cancelCreateRoomBtn = document.getElementById('cancelCreateRoomBtn');
+  const createRoomForm = document.getElementById('createRoomForm');
+  const roomNameInput = document.getElementById('roomNameInput');
+  const roomNameError = document.getElementById('roomNameError');
+  const optPublic = document.getElementById('optPublic');
+  const optPrivate = document.getElementById('optPrivate');
+  const optPublicLabel = document.getElementById('optPublicLabel');
+  const optPrivateLabel = document.getElementById('optPrivateLabel');
+  const roomPasswordGroup = document.getElementById('roomPasswordGroup');
+  const roomPasswordInput = document.getElementById('roomPasswordInput');
+  const submitCreateRoomBtn = document.getElementById('submitCreateRoomBtn');
+  const createRoomSpinner = document.getElementById('createRoomSpinner');
+  const createRoomBtnText = document.getElementById('createRoomBtnText');
+
+  // Lock flag chống duplicate submission khi tạo phòng (AC 3)
+  let isCreatingRoom = false;
 
   // Toast Container
   const toastContainer = document.getElementById('toastContainer');
@@ -70,6 +94,56 @@ document.addEventListener('DOMContentLoaded', () => {
       clearInputError();
     });
 
+    // COT-598: Mở Modal Tạo phòng chơi
+    if (createRoomModalBtn) {
+      createRoomModalBtn.addEventListener('click', openCreateRoomModal);
+    }
+    if (emptyCreateBtn) {
+      emptyCreateBtn.addEventListener('click', openCreateRoomModal);
+    }
+
+    // Đóng Modal Tạo phòng
+    if (closeCreateRoomModalBtn) {
+      closeCreateRoomModalBtn.addEventListener('click', closeCreateRoomModal);
+    }
+    if (cancelCreateRoomBtn) {
+      cancelCreateRoomBtn.addEventListener('click', closeCreateRoomModal);
+    }
+    if (createRoomModal) {
+      createRoomModal.addEventListener('click', (e) => {
+        if (e.target === createRoomModal) closeCreateRoomModal();
+      });
+    }
+
+    // Toggle lựa chọn Công khai / Riêng tư
+    if (optPublic && optPrivate) {
+      optPublic.addEventListener('change', () => {
+        if (optPublic.checked) {
+          optPublicLabel?.classList.add('selected');
+          optPrivateLabel?.classList.remove('selected');
+          if (roomPasswordGroup) roomPasswordGroup.style.display = 'none';
+        }
+      });
+
+      optPrivate.addEventListener('change', () => {
+        if (optPrivate.checked) {
+          optPrivateLabel?.classList.add('selected');
+          optPublicLabel?.classList.remove('selected');
+          if (roomPasswordGroup) roomPasswordGroup.style.display = 'flex';
+        }
+      });
+    }
+
+    // Realtime clear lỗi khi gõ tên phòng
+    if (roomNameInput) {
+      roomNameInput.addEventListener('input', clearCreateRoomError);
+    }
+
+    // Submit Form Tạo phòng chơi (COT-598)
+    if (createRoomForm) {
+      createRoomForm.addEventListener('submit', handleCreateRoomSubmit);
+    }
+
     // Nút làm mới danh sách
     refreshRoomsBtn.addEventListener('click', async () => {
       refreshRoomsBtn.classList.add('rotating');
@@ -96,7 +170,7 @@ document.addEventListener('DOMContentLoaded', () => {
       renderRooms();
     });
 
-    // Đóng Modal
+    // Đóng Modal Xem phòng / Vào phòng
     closeModalBtn.addEventListener('click', closeModal);
     roomModal.addEventListener('click', (e) => {
       if (e.target === roomModal) closeModal();
@@ -329,22 +403,183 @@ document.addEventListener('DOMContentLoaded', () => {
   /**
    * Mở Modal điều hướng vào phòng
    * Tiêu chí chấp nhận 3: Điều hướng vào đúng phòng và hiển thị vai trò theo response từ máy chủ.
+   * Tiêu chí chấp nhận 4 (COT-598): Tạo thành công đưa người dùng vào phòng với vai trò Chủ phòng, hiển thị vị trí Đối thủ đang trống và mã 6 số.
    */
   function openRoomModal(room, role, roleMessage) {
     const statusMeta = window.ROOM_STATUS[room.status] || { label: room.status, className: '' };
 
-    modalRoomCode.textContent = `#${room.code}`;
-    modalHostName.textContent = room.hostName;
-    modalRoomStatus.textContent = statusMeta.label;
-    modalRoomStatus.className = `status-badge ${statusMeta.className}`;
-    modalUserRole.textContent = role === 'PLAYER' ? 'KỲ THỦ (NGƯỜI CHƠI 2)' : 'KHÁN GIẢ (QUAN SÁT VIÊN)';
-    modalRoleNotice.textContent = roleMessage;
+    if (modalRoomCode) modalRoomCode.textContent = `#${room.code}`;
+    if (modalRoomName) modalRoomName.textContent = room.name || 'Phòng cờ';
+    if (modalHostName) modalHostName.textContent = room.hostName || 'Chủ phòng';
+    
+    // Hiển thị vị trí Đối thủ (COT-598)
+    if (modalOpponentName) {
+      if (room.opponentName) {
+        modalOpponentName.textContent = room.opponentName;
+        modalOpponentName.className = 'opponent-badge';
+      } else {
+        modalOpponentName.textContent = 'Đang trống (Chờ kỳ thủ ghép trận)';
+        modalOpponentName.className = 'opponent-badge empty-slot';
+      }
+    }
+
+    if (modalRoomStatus) {
+      modalRoomStatus.textContent = statusMeta.label;
+      modalRoomStatus.className = `status-badge ${statusMeta.className}`;
+    }
+
+    if (modalUserRole) {
+      if (role === 'HOST') {
+        modalUserRole.textContent = 'CHỦ PHÒNG (HOST - QUÂN ĐỎ)';
+        modalUserRole.className = 'role-badge role-player';
+      } else if (role === 'PLAYER') {
+        modalUserRole.textContent = 'KỲ THỦ (NGƯỜI CHƠI 2 - QUÂN ĐEN)';
+        modalUserRole.className = 'role-badge role-player';
+      } else {
+        modalUserRole.textContent = 'KHÁN GIẢ (QUAN SÁT VIÊN)';
+        modalUserRole.className = 'role-badge role-spectator';
+      }
+    }
+
+    if (modalRoleNotice) modalRoleNotice.textContent = roleMessage;
 
     roomModal.style.display = 'flex';
   }
 
   function closeModal() {
     roomModal.style.display = 'none';
+  }
+
+  /**
+   * ===================================================================
+   * COT-598: Code Modal Tạo phòng chơi (Công khai / Riêng tư)
+   * ===================================================================
+   */
+
+  /**
+   * Mở Modal Tạo phòng chơi
+   * Phạm vi: Chỉ hiển thị/cho phép thao tác khi người dùng đã đăng nhập.
+   */
+  function openCreateRoomModal() {
+    const currentUser = apiService.getCurrentUser();
+    if (!currentUser) {
+      showToast('Vui lòng đăng nhập để tạo phòng chơi.', 'error');
+      return;
+    }
+
+    // Reset Form
+    if (roomNameInput) {
+      roomNameInput.value = '';
+    }
+    clearCreateRoomError();
+
+    if (optPublic) optPublic.checked = true;
+    optPublicLabel?.classList.add('selected');
+    optPrivateLabel?.classList.remove('selected');
+
+    if (roomPasswordGroup) roomPasswordGroup.style.display = 'none';
+    if (roomPasswordInput) roomPasswordInput.value = '';
+
+    if (createRoomModal) {
+      createRoomModal.style.display = 'flex';
+      setTimeout(() => roomNameInput?.focus(), 60);
+    }
+  }
+
+  /**
+   * Đóng Modal Tạo phòng chơi
+   */
+  function closeCreateRoomModal() {
+    if (createRoomModal) {
+      createRoomModal.style.display = 'none';
+    }
+    clearCreateRoomError();
+  }
+
+  /**
+   * Xử lý gửi Form Tạo phòng chơi
+   * Tiêu chí chấp nhận 1: Form có Tên Room và lựa chọn Công khai/Riêng tư.
+   * Tiêu chí chấp nhận 2: Không gửi request nếu Tên Room để trống hoặc không hợp lệ.
+   * Tiêu chí chấp nhận 3: Không tạo nhiều phòng do bấm liên tục (Lock button / Spinner).
+   * Tiêu chí chấp nhận 4: Tạo thành công đưa người dùng vào phòng với vai trò Chủ phòng.
+   */
+  async function handleCreateRoomSubmit(e) {
+    e.preventDefault();
+    clearCreateRoomError();
+
+    // Tiêu chí 3: Chặn tạo nhiều phòng do bấm liên tục (Double submit lock)
+    if (isCreatingRoom) {
+      return;
+    }
+
+    const rawName = roomNameInput ? roomNameInput.value.trim() : '';
+
+    // Tiêu chí 2: Không gửi request nếu Tên Room để trống
+    if (!rawName) {
+      showCreateRoomError('Tên phòng không được để trống.');
+      roomNameInput?.focus();
+      return;
+    }
+
+    if (rawName.length < 3 || rawName.length > 50) {
+      showCreateRoomError('Tên phòng phải có độ dài từ 3 đến 50 ký tự.');
+      roomNameInput?.focus();
+      return;
+    }
+
+    const isPrivate = optPrivate ? optPrivate.checked : false;
+    const password = (isPrivate && roomPasswordInput) ? roomPasswordInput.value.trim() : null;
+
+    // Bắt đầu gửi yêu cầu: Khóa nút và hiển thị trạng thái đang xử lý
+    isCreatingRoom = true;
+    if (submitCreateRoomBtn) submitCreateRoomBtn.disabled = true;
+    if (createRoomSpinner) createRoomSpinner.style.display = 'inline-block';
+    if (createRoomBtnText) createRoomBtnText.textContent = 'Đang tạo phòng...';
+
+    try {
+      const response = await apiService.createRoom({
+        name: rawName,
+        isPrivate,
+        password
+      });
+
+      if (response.success) {
+        closeCreateRoomModal();
+        await loadRooms();
+        showToast(`Tạo phòng cờ "${response.room.name}" thành công!`, 'success');
+
+        // Tiêu chí 4: Điều hướng người tạo vào Room với vai trò Chủ phòng
+        openRoomModal(response.room, response.role, response.roleMessage);
+      }
+    } catch (error) {
+      showCreateRoomError(error.message);
+      showToast(error.message, 'error');
+    } finally {
+      isCreatingRoom = false;
+      if (submitCreateRoomBtn) submitCreateRoomBtn.disabled = false;
+      if (createRoomSpinner) createRoomSpinner.style.display = 'none';
+      if (createRoomBtnText) createRoomBtnText.textContent = '+ Tạo Phòng Ngay';
+    }
+  }
+
+  function showCreateRoomError(message) {
+    if (roomNameError) {
+      roomNameError.textContent = message;
+      roomNameError.style.display = 'block';
+    }
+    if (roomNameInput) {
+      roomNameInput.classList.add('input-error');
+    }
+  }
+
+  function clearCreateRoomError() {
+    if (roomNameError) {
+      roomNameError.textContent = '';
+      roomNameError.style.display = 'none';
+    }
+    if (roomNameInput) {
+      roomNameInput.classList.remove('input-error');
+    }
   }
 
   /**
