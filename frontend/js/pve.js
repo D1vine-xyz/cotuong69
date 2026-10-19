@@ -9,9 +9,12 @@
   } else {
     const pveModule = factory();
     root.PveApiService = pveModule.PveApiService;
+    root.PveGameController = pveModule.PveGameController;
     root.PVE_COLORS = pveModule.PVE_COLORS;
     root.PVE_END_REASONS = pveModule.PVE_END_REASONS;
+    root.PVE_END_REASON_LABELS = pveModule.PVE_END_REASON_LABELS;
     root.PVE_RESULTS = pveModule.PVE_RESULTS;
+    root.PVE_RESULT_LABELS = pveModule.PVE_RESULT_LABELS;
   }
 })(typeof globalThis !== 'undefined' ? globalThis : this, function () {
   'use strict';
@@ -27,18 +30,26 @@
     DRAW: 'DRAW',
   });
 
+  const PVE_RESULT_LABELS = Object.freeze({
+    WIN: 'Chiến Thắng',
+    LOSS: 'Thất Bại',
+    DRAW: 'Hòa Cờ',
+  });
+
   const PVE_END_REASONS = Object.freeze({
     CHECKMATE: 'CHECKMATE',
+    NO_LEGAL_MOVES: 'NO_LEGAL_MOVES',
     STALEMATE: 'STALEMATE',
-    RESIGN: 'RESIGN',
     TIMEOUT: 'TIMEOUT',
+    RESIGN: 'RESIGN',
   });
 
   const PVE_END_REASON_LABELS = Object.freeze({
     CHECKMATE: 'Chiếu bí',
-    STALEMATE: 'Hết nước đi (Vô sát)',
+    NO_LEGAL_MOVES: 'Hết nước đi',
+    STALEMATE: 'Hết nước đi',
+    TIMEOUT: 'Hết thời gian',
     RESIGN: 'Đầu hàng',
-    TIMEOUT: 'Hết thời gian nước đi',
   });
 
   // Bàn cờ tiêu chuẩn ban đầu của Cờ Tướng (90 điểm: 10 hàng x 9 cột)
@@ -91,7 +102,6 @@
       this.isCreating = true;
 
       try {
-        // Giả lập kết nối mạng (hoặc gọi HTTP nếu trong môi trường browser với backend đang chạy)
         await new Promise((resolve) => setTimeout(resolve, 60));
 
         const botColor = playerColor === PVE_COLORS.RED ? PVE_COLORS.BLACK : PVE_COLORS.RED;
@@ -108,7 +118,7 @@
           capturedPieces: { red: [], black: [] },
           lastMove: null,
           createdAt: new Date().toISOString(),
-          // Ràng buộc Elo: Không lưu hay thay đổi Elo
+          // COT-640 Ràng buộc Elo: Tuyệt đối không thay đổi hay tính điểm Elo
           hasEloRating: false,
         };
 
@@ -195,7 +205,6 @@
       await new Promise((resolve) => setTimeout(resolve, 80));
 
       match.ply += 1;
-      // Nước đi mẫu được xác nhận bởi máy chủ
       const sampleBotMove = match.botColor === PVE_COLORS.RED
         ? { from: 'c9', to: 'c8', captured: null }
         : { from: 'b2', to: 'e2', captured: null };
@@ -214,6 +223,8 @@
 
     /**
      * COT-640: Người chơi đầu hàng trận PvE
+     * Tiêu chí: Người chơi có thể chọn Đầu hàng trong lúc trận đang diễn ra.
+     * Cập nhật kết quả: THUA (LOSS), Lý do: ĐẦU HÀNG (RESIGN).
      */
     async resignMatch(matchId) {
       const match = this.inMemoryMatches.get(matchId);
@@ -232,6 +243,41 @@
       match.status = 'FINISHED';
       match.result = PVE_RESULTS.LOSS; // Người chơi đầu hàng -> Kết quả THUA
       match.endReason = PVE_END_REASONS.RESIGN;
+      match.hasEloRating = false; // Ràng buộc: Tuyệt đối không thay đổi Elo
+      this.currentMatch = JSON.parse(JSON.stringify(match));
+      this.notify('MATCH_FINISHED', this.currentMatch);
+
+      return {
+        success: true,
+        match: JSON.parse(JSON.stringify(match)),
+      };
+    }
+
+    /**
+     * COT-640: Kết thúc ván đấu từ máy chủ với kết quả (WIN / LOSS / DRAW) và lý do
+     */
+    async finishMatch(matchId, { result, endReason } = {}) {
+      const match = this.inMemoryMatches.get(matchId);
+      if (!match) {
+        const err = new Error('Không tìm thấy trận đấu.');
+        err.code = 'MATCH_NOT_FOUND';
+        throw err;
+      }
+
+      if (match.status !== 'PLAYING') {
+        const err = new Error('Trận đấu đã kết thúc.');
+        err.code = 'MATCH_FINISHED';
+        throw err;
+      }
+
+      const validResult = Object.values(PVE_RESULTS).includes(result) ? result : PVE_RESULTS.LOSS;
+      const validEndReason = Object.values(PVE_END_REASONS).includes(endReason) ? endReason : PVE_END_REASONS.CHECKMATE;
+
+      match.status = 'FINISHED';
+      match.result = validResult;
+      match.endReason = validEndReason;
+      match.hasEloRating = false;
+
       this.currentMatch = JSON.parse(JSON.stringify(match));
       this.notify('MATCH_FINISHED', this.currentMatch);
 
@@ -269,7 +315,7 @@
   }
 
   /**
-   * COT-639: Quản lý vòng đời và logic tương tác bàn cờ PvE
+   * COT-639, COT-640: Quản lý vòng đời và logic tương tác bàn cờ PvE
    */
   class PveGameController {
     constructor(apiService = new PveApiService()) {
@@ -277,10 +323,22 @@
       this.match = null;
       this.isBotThinkingState = false;
       this.movePendingState = false;
+      this.isResignModalOpenState = false;
+      this.isResultModalOpenState = false;
       this.listeners = [];
+
+      this.api.onMatchEvent(({ type, data }) => {
+        if (type === 'MATCH_FINISHED') {
+          this.match = data;
+          this.isResultModalOpenState = true;
+          this.emitChange();
+        }
+      });
     }
 
     async startMatch({ playerColor }) {
+      this.isResignModalOpenState = false;
+      this.isResultModalOpenState = false;
       const res = await this.api.createPveMatch({ playerColor });
       if (res.success) {
         this.match = res.match;
@@ -295,7 +353,7 @@
 
     async makePlayerMove({ from, to }) {
       if (this.isBoardLocked()) {
-        const err = new Error('Bàn cờ đang bị khóa. Tuyệt đối không thể đi quân khi tới lượt máy.');
+        const err = new Error('Bàn cờ đang bị khóa. Tuyệt đối không thể đi quân khi tới lượt máy hoặc khi ván đấu đã kết thúc.');
         err.code = 'BOARD_LOCKED';
         throw err;
       }
@@ -332,14 +390,45 @@
       }
     }
 
-    async resign() {
-      if (!this.match || this.match.status !== 'PLAYING') return;
+    // Mở hộp xác nhận đầu hàng
+    openResignConfirm() {
+      if (!this.match || this.match.status !== 'PLAYING') return false;
+      this.isResignModalOpenState = true;
+      this.emitChange();
+      return true;
+    }
+
+    // Đóng hộp xác nhận đầu hàng
+    closeResignConfirm() {
+      this.isResignModalOpenState = false;
+      this.emitChange();
+    }
+
+    // Xác nhận gửi yêu cầu đầu hàng lên máy chủ
+    async confirmResign() {
+      if (!this.match || this.match.status !== 'PLAYING') return null;
+      this.isResignModalOpenState = false;
       const res = await this.api.resignMatch(this.match.id);
       if (res.success) {
         this.match = res.match;
+        this.isResultModalOpenState = true;
         this.emitChange();
       }
       return res;
+    }
+
+    async resign() {
+      return this.confirmResign();
+    }
+
+    openResultModal() {
+      this.isResultModalOpenState = true;
+      this.emitChange();
+    }
+
+    closeResultModal() {
+      this.isResultModalOpenState = false;
+      this.emitChange();
     }
 
     isPlayerTurn() {
@@ -350,16 +439,43 @@
       return this.isBotThinkingState;
     }
 
+    /**
+     * COT-640 AC 3: Khóa bàn cờ, không cho người chơi đi thêm sau khi kết thúc
+     */
     isBoardLocked() {
-      if (!this.match || this.match.status !== 'PLAYING') return true;
+      if (!this.match) return true;
+      if (this.match.status !== 'PLAYING') return true; // KHÓA khi ván đấu đã kết thúc
       if (this.movePendingState) return true;
       if (this.isBotThinkingState) return true;
       if (!this.isPlayerTurn()) return true;
       return false;
     }
 
+    getResultDetails() {
+      if (!this.match) return null;
+      const result = this.match.result || 'LOSS';
+      const endReason = this.match.endReason || 'RESIGN';
+      return {
+        result,
+        resultTitle: PVE_RESULT_LABELS[result] || 'Kết Quả',
+        endReason,
+        endReasonLabel: PVE_END_REASON_LABELS[endReason] || 'Kết thúc trận đấu',
+        playerColor: this.match.playerColor,
+        // COT-640 Tiêu chí 4: Tuyệt đối không thay đổi Elo
+        hasEloRating: false,
+      };
+    }
+
     getBannerStatus() {
       if (!this.match) return null;
+      if (this.match.status === 'FINISHED') {
+        const details = this.getResultDetails();
+        return {
+          type: 'MATCH_FINISHED',
+          title: `Trận đấu kết thúc: ${details.resultTitle}`,
+          message: `Lý do: ${details.endReasonLabel}. Bàn cờ đã khóa. Không tính điểm Elo.`
+        };
+      }
       if (this.isBotThinkingState || (!this.isPlayerTurn() && this.match.status === 'PLAYING')) {
         return {
           type: 'BOT_THINKING',
@@ -390,9 +506,14 @@
     getSnapshot() {
       return {
         match: this.match ? JSON.parse(JSON.stringify(this.match)) : null,
+        isPlaying: Boolean(this.match && this.match.status === 'PLAYING'),
+        isFinished: Boolean(this.match && this.match.status === 'FINISHED'),
         isPlayerTurn: this.isPlayerTurn(),
         isBotThinking: this.isBotThinking(),
         isBoardLocked: this.isBoardLocked(),
+        isResignModalOpen: this.isResignModalOpenState,
+        isResultModalOpen: this.isResultModalOpenState,
+        resultDetails: this.getResultDetails(),
         bannerStatus: this.getBannerStatus()
       };
     }
@@ -403,6 +524,7 @@
     PveGameController,
     PVE_COLORS,
     PVE_RESULTS,
+    PVE_RESULT_LABELS,
     PVE_END_REASONS,
     PVE_END_REASON_LABELS,
     createInitialXiangqiBoard,

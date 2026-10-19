@@ -619,6 +619,119 @@
     </div>
   </div>
 
+  <!-- COT-639 & COT-640: Thanh trạng thái & Nút Xin Thua (Đầu hàng) ván đấu PvE -->
+  <div id="pveGameActionBar" class="pve-game-action-bar" style="display: none;" data-testid="pve-action-bar">
+    <div class="pve-bar-left">
+      <div id="pveBotStatusBanner" class="pve-bot-banner" data-testid="pve-bot-banner">
+        <span class="pulse-indicator" id="pveBotPulseIndicator"></span>
+        <span id="pveBotStatusText">Đang sẵn sàng ván đấu với máy</span>
+      </div>
+    </div>
+    <div class="pve-bar-right">
+      <!-- COT-640 AC 1: Nút Xin thua (Đầu hàng) -->
+      <button type="button" id="pveResignBtn" class="btn btn-resign-pve" title="Xin thua (Đầu hàng) ván đấu này" data-testid="pve-resign-btn">
+        <span class="btn-resign-icon" aria-hidden="true">🏳️</span>
+        <span class="btn-resign-text">Xin Thua (Đầu hàng)</span>
+      </button>
+    </div>
+  </div>
+
+  <!-- COT-640: Modal Xác Nhận Đầu Hàng (Xin Thua) -->
+  <div id="pveResignConfirmModal" class="modal-overlay" style="display: none;" role="dialog" aria-modal="true" aria-labelledby="pveResignHeading" data-testid="pve-resign-modal">
+    <div class="modal-card modal-card-resign">
+      <div class="modal-header">
+        <div class="modal-title-with-icon">
+          <span class="header-icon warning-icon">🏳️</span>
+          <h3 id="pveResignHeading">Xác Nhận Đầu Hàng</h3>
+        </div>
+        <button type="button" id="closePveResignModalBtn" class="close-btn" aria-label="Đóng" data-testid="close-pve-resign-btn">&times;</button>
+      </div>
+
+      <div class="modal-body">
+        <div class="resign-warning-box">
+          <p class="resign-prompt-text">
+            Bạn có chắc chắn muốn <strong>đầu hàng (xin thua)</strong> ván cờ này không?
+          </p>
+          <p class="resign-sub-text">
+            Sau khi xác nhận, ván đấu sẽ lập tức kết thúc với kết quả <strong>Thất Bại (Thua)</strong> và bàn cờ sẽ được khóa lại.
+          </p>
+        </div>
+
+        <div id="pveResignError" class="input-error-msg" role="alert" style="display: none;"></div>
+
+        <div class="pve-rules-notice">
+          <span class="notice-icon">ℹ️</span>
+          <span class="notice-text">Trận đấu luyện tập với Máy không tính điểm xếp hạng Elo.</span>
+        </div>
+      </div>
+
+      <div class="modal-footer">
+        <button type="button" id="pveCancelResignBtn" class="btn btn-secondary" data-testid="cancel-resign-btn">
+          Hủy Bỏ (Tiếp tục chơi)
+        </button>
+        <button type="button" id="pveConfirmResignBtn" class="btn btn-danger" data-testid="confirm-resign-btn">
+          <span class="btn-spinner" id="pveResignSpinner" style="display: none;"></span>
+          <span id="pveConfirmResignBtnText">🏳️ Xác Nhận Đầu Hàng</span>
+        </button>
+      </div>
+    </div>
+  </div>
+
+  <!-- COT-640: Modal Popup Thông Báo Kết Quả Ván Đấu PvE -->
+  <div id="pveMatchResultModal" class="modal-overlay" style="display: none;" role="dialog" aria-modal="true" aria-labelledby="pveResultHeading" data-testid="pve-result-modal">
+    <div class="modal-card modal-card-result theme-loss" id="pveResultCard">
+      <div class="modal-header">
+        <div class="modal-title-with-icon">
+          <span class="header-icon" id="pveResultHeaderIcon">⚔️</span>
+          <h3 id="pveResultHeading">Kết Quả Ván Đấu</h3>
+        </div>
+        <button type="button" id="closePveResultModalBtn" class="close-btn" aria-label="Đóng" data-testid="close-pve-result-btn">&times;</button>
+      </div>
+
+      <div class="modal-body pve-result-body">
+        <!-- Huy hiệu và tiêu đề kết quả: Thắng / Thua / Hòa -->
+        <div class="result-hero-box">
+          <div class="result-outcome-badge result-loss" id="pveResultBadge" data-testid="pve-result-title">
+            <span class="outcome-icon" id="pveResultOutcomeIcon">⚔️</span>
+            <span class="outcome-text" id="pveResultTitleText">Thất Bại</span>
+          </div>
+          <p class="result-hero-subtitle" id="pveResultSubtitle">Bạn đã để thua ván cờ này trước máy chủ AI.</p>
+        </div>
+
+        <!-- Chi tiết: Lý do kết thúc (Chiếu bí, Hết nước đi, Hết thời gian, Đầu hàng) -->
+        <div class="result-details-card">
+          <div class="detail-row">
+            <span class="detail-label">Lý do kết thúc:</span>
+            <span class="detail-value reason-tag" id="pveResultReason" data-testid="pve-result-reason">Đầu hàng</span>
+          </div>
+          <div class="detail-row">
+            <span class="detail-label">Phe người chơi:</span>
+            <span class="detail-value player-side-tag" id="pveResultPlayerSide">🔴 Bên Đỏ</span>
+          </div>
+          <div class="detail-row">
+            <span class="detail-label">Trạng thái bàn cờ:</span>
+            <span class="detail-value board-locked-tag" id="pveResultBoardLockNotice">🔒 Bàn cờ đã khóa (Trận đấu đã kết thúc)</span>
+          </div>
+        </div>
+
+        <!-- COT-640 Tiêu chí 4: TUYỆT ĐỐI KHÔNG HIỂN THỊ THAY ĐỔI ELO CHO TRẬN VỚI MÁY -->
+        <div class="pve-no-elo-badge" data-testid="pve-result-no-elo">
+          <span class="notice-icon" aria-hidden="true">🛡️</span>
+          <span class="notice-text">Trận đấu luyện tập với Máy không tính điểm xếp hạng Elo.</span>
+        </div>
+      </div>
+
+      <div class="modal-footer result-modal-footer">
+        <button type="button" id="pveResultBackToLobbyBtn" class="btn btn-secondary" data-testid="pve-back-to-lobby-btn">
+          <span>🏠 Trở Về Sảnh</span>
+        </button>
+        <button type="button" id="pveResultNewGameBtn" class="btn btn-gold btn-large" data-testid="pve-new-game-btn">
+          <span>⚔️ Chơi Ván Mới</span>
+        </button>
+      </div>
+    </div>
+  </div>
+
   <script src="/js/pve.js"></script>
   <script type="module" src="/src/main.jsx"></script>
 </body>
