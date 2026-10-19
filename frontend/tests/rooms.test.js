@@ -433,4 +433,120 @@ describe('Nghiệm thu Task COT-599: Giao diện Danh sách bạn bè và nút C
   });
 });
 
+describe('Nghiệm thu Task COT-603: Xử lý luồng tự động tham gia phòng khi người dùng mở liên kết mời', () => {
+
+  // AC 1: Mở link khi chưa đăng nhập chuyển tới màn hình Đăng nhập
+  test('AC 1.1: Mở link khi chưa đăng nhập chuyển hướng tới màn hình Đăng nhập và lưu phòng trong phiên', async () => {
+    const api = new RoomApiService();
+    // Giả lập trạng thái người dùng chưa đăng nhập
+    api.setCurrentUser(null);
+    api.clearPendingRoomInvite();
+
+    const result = await api.handleOpenRoomLink('https://cotuong69.vn/room/102938');
+
+    assert.strictEqual(result.action, 'REDIRECT_LOGIN', 'Phải trả về action chuyển hướng Đăng nhập');
+    assert.ok(result.redirectUrl.includes('/login'), 'Redirect URL phải dẫn tới /login');
+    assert.strictEqual(result.pendingRoomCode, '102938', 'Mã phòng phải được nhận diện chính xác');
+    assert.strictEqual(api.getPendingRoomInvite(), '102938', 'Mã phòng phải được lưu lại trong phiên');
+  });
+
+  test('AC 1.2: Mở link khi đã đăng nhập tiếp tục tham gia phòng bình thường', async () => {
+    const api = new RoomApiService();
+    // Người dùng đã đăng nhập sẵn
+    api.setCurrentUser({ id: 'user-01', username: 'kỳ_thủ_test', isLoggedIn: true });
+
+    const result = await api.handleOpenRoomLink('/room/102938');
+
+    assert.strictEqual(result.action, 'JOIN_SUCCESS', 'Người dùng đã đăng nhập được vào thẳng phòng');
+    assert.strictEqual(result.success, true);
+    assert.strictEqual(result.room.code, '102938');
+    assert.ok(['PLAYER', 'SPECTATOR'].includes(result.role), 'Vai trò phải được gán hợp lệ');
+  });
+
+  // AC 2: Sau khi đăng nhập thành công quay lại đúng phòng trong link
+  test('AC 2.1: Sau khi đăng nhập thành công tự động đưa người dùng vào đúng phòng đã lưu', async () => {
+    const api = new RoomApiService();
+    api.setCurrentUser(null);
+
+    // Bước 1: Khách mở link mời phòng 102938 -> lưu vào phiên
+    await api.handleOpenRoomLink('/room/102938');
+    assert.strictEqual(api.getPendingRoomInvite(), '102938');
+
+    // Bước 2: Người dùng đăng nhập thành công
+    api.setCurrentUser({ id: 'user-02', username: 'nguyen_tan_sang', isLoggedIn: true });
+
+    // Bước 3: Hệ thống xử lý chuyển hướng sau đăng nhập
+    const redirectRes = await api.handlePostLoginRoomRedirect();
+
+    assert.strictEqual(redirectRes.hasPending, true, 'Hệ thống nhận diện có phòng chờ trong phiên');
+    assert.strictEqual(redirectRes.pendingRoomCode, '102938');
+    assert.strictEqual(redirectRes.success, true, 'Tham gia phòng thành công');
+    assert.strictEqual(redirectRes.room.code, '102938', 'Đưa người dùng vào đúng phòng 102938 trong link');
+
+    // Phiên phải được xóa sạch sau khi tham gia để tránh lặp lại
+    assert.strictEqual(api.getPendingRoomInvite(), null, 'Phiên chờ phải được dọn dẹp sau khi dùng');
+  });
+
+  // AC 3: Phòng đã đóng hiển thị thông báo phù hợp ("Room không còn khả dụng")
+  test('AC 3.1: Báo lỗi "Room không còn khả dụng" khi phòng trong link không tồn tại', async () => {
+    const api = new RoomApiService();
+    api.setCurrentUser({ id: 'user-01', isLoggedIn: true });
+
+    await assert.rejects(
+      async () => { await api.handleOpenRoomLink('/room/999999'); },
+      { message: 'Room không còn khả dụng.', code: 'ROOM_UNAVAILABLE' }
+    );
+  });
+
+  test('AC 3.2: Báo lỗi "Room không còn khả dụng" khi phòng trong link đã đóng (CLOSED)', async () => {
+    const api = new RoomApiService();
+    api.setCurrentUser({ id: 'user-01', isLoggedIn: true });
+
+    // Đóng phòng 102938
+    api.emitRoomStateChange('102938', 'CLOSED');
+
+    await assert.rejects(
+      async () => { await api.handleOpenRoomLink('/room/102938'); },
+      { message: 'Room không còn khả dụng.', code: 'ROOM_UNAVAILABLE' }
+    );
+  });
+
+  test('AC 3.3: Sau khi đăng nhập, nếu phòng đã đóng thì handlePostLoginRoomRedirect báo lỗi phù hợp', async () => {
+    const api = new RoomApiService();
+    api.setCurrentUser(null);
+
+    // Mở link phòng đóng
+    api.emitRoomStateChange('102938', 'CLOSED');
+    api.savePendingRoomInvite('102938');
+
+    // Đăng nhập
+    api.setCurrentUser({ id: 'user-03', isLoggedIn: true });
+
+    const postLoginRes = await api.handlePostLoginRoomRedirect();
+    assert.strictEqual(postLoginRes.hasPending, true);
+    assert.strictEqual(postLoginRes.success, false);
+    assert.strictEqual(postLoginRes.error, 'Room không còn khả dụng.');
+    assert.strictEqual(postLoginRes.code, 'ROOM_UNAVAILABLE');
+  });
+
+  // Scope: Sau khi quay lại phòng, vai trò phải do máy chủ xác định theo trạng thái mới nhất
+  test('Scope: Vai trò người tham gia được xác định động theo trạng thái phòng mới nhất', async () => {
+    const api = new RoomApiService();
+    api.setCurrentUser({ id: 'user-01', isLoggedIn: true });
+
+    // 1. Khi phòng đang chờ đối thủ (WAITING_OPPONENT, trống ghế đối thủ) -> Gán PLAYER
+    const resPlayer = await api.joinRoomFromInvite('102938');
+    assert.strictEqual(resPlayer.role, 'PLAYER');
+    assert.strictEqual(resPlayer.side, 'BLACK');
+    assert.strictEqual(resPlayer.canMove, true);
+
+    // 2. Khi phòng đã đủ người hoặc đang đấu (PLAYING) -> Gán SPECTATOR
+    api.emitRoomStateChange('102938', 'PLAYING', { opponentId: 'user-other', playerCount: 2 });
+    const resSpectator = await api.joinRoomFromInvite('102938');
+    assert.strictEqual(resSpectator.role, 'SPECTATOR');
+    assert.strictEqual(resSpectator.canMove, false);
+  });
+});
+
+
 

@@ -1307,4 +1307,78 @@ body {
   filter: grayscale(1);
 }
 
+/* ===================================================================
+   COT-603: Login Modal & Invite Link Auto-Join Styles
+   =================================================================== */
+
+.user-auth-wrapper {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+
+.btn-logout {
+  background: transparent;
+  border: 1px solid rgba(248, 81, 73, 0.35);
+  color: #f85149;
+  font-size: 11px;
+  font-weight: 600;
+  padding: 4px 8px;
+  border-radius: var(--radius-sm);
+  cursor: pointer;
+  transition: var(--transition);
+}
+
+.btn-logout:hover {
+  background: rgba(248, 81, 73, 0.15);
+  border-color: #f85149;
+}
+
+.modal-card-login {
+  max-width: 440px;
+}
+
+.pending-room-invite-banner {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 12px 14px;
+  border-radius: var(--radius-sm);
+  background: rgba(223, 177, 91, 0.12);
+  border: 1px solid rgba(223, 177, 91, 0.45);
+  color: #fde68a;
+  margin-bottom: 16px;
+  animation: fadeInModal 0.3s ease-out;
+}
+
+.pending-room-invite-banner .banner-icon {
+  font-size: 24px;
+  flex: none;
+}
+
+.pending-room-invite-banner .banner-text strong {
+  display: block;
+  font-size: 13px;
+  color: var(--text-main);
+  margin-bottom: 3px;
+}
+
+.pending-room-invite-banner .banner-text p {
+  font-size: 12px;
+  color: #cbd5e1;
+  margin: 0;
+  line-height: 1.5;
+}
+
+.highlight-code {
+  color: var(--gold-primary);
+  font-family: 'Cinzel', Georgia, serif;
+  font-weight: 700;
+  letter-spacing: 0.06em;
+  padding: 1px 4px;
+  background: rgba(223, 177, 91, 0.15);
+  border-radius: 3px;
+}
+
+
 

@@ -89,6 +89,24 @@ document.addEventListener('DOMContentLoaded', () => {
   const friendSearchInput = document.getElementById('friendSearchInput');
   const friendsListContainer = document.getElementById('friendsListContainer');
 
+  // COT-603: Login Modal & Auth State DOM Elements
+  const userProfileBar = document.getElementById('userProfileBar');
+  const headerLogoutBtn = document.getElementById('headerLogoutBtn');
+  const openLoginModalBtn = document.getElementById('openLoginModalBtn');
+  const loginModal = document.getElementById('loginModal');
+  const closeLoginModalBtn = document.getElementById('closeLoginModalBtn');
+  const cancelLoginBtn = document.getElementById('cancelLoginBtn');
+  const loginForm = document.getElementById('loginForm');
+  const loginUsernameInput = document.getElementById('loginUsernameInput');
+  const loginPasswordInput = document.getElementById('loginPasswordInput');
+  const loginUsernameError = document.getElementById('loginUsernameError');
+  const loginPasswordError = document.getElementById('loginPasswordError');
+  const submitLoginBtn = document.getElementById('submitLoginBtn');
+  const loginSpinner = document.getElementById('loginSpinner');
+  const loginBtnText = document.getElementById('loginBtnText');
+  const loginPendingRoomBanner = document.getElementById('loginPendingRoomBanner');
+  const pendingRoomCodeDisplay = document.getElementById('pendingRoomCodeDisplay');
+
   // Toast Container
   const toastContainer = document.getElementById('toastContainer');
 
@@ -97,8 +115,10 @@ document.addEventListener('DOMContentLoaded', () => {
    */
   async function init() {
     setupEventListeners();
+    updateUserAuthUi();
     await loadRooms();
     setupRealtimeSubscription();
+    await checkAndHandleInviteLinkOnLoad();
   }
 
   /**
@@ -254,6 +274,28 @@ document.addEventListener('DOMContentLoaded', () => {
           return;
         }
       });
+    }
+
+    // COT-603: Auth & Login Modal Events
+    if (headerLogoutBtn) {
+      headerLogoutBtn.addEventListener('click', handleLogout);
+    }
+    if (openLoginModalBtn) {
+      openLoginModalBtn.addEventListener('click', () => openLoginModal());
+    }
+    if (closeLoginModalBtn) {
+      closeLoginModalBtn.addEventListener('click', closeLoginModal);
+    }
+    if (cancelLoginBtn) {
+      cancelLoginBtn.addEventListener('click', closeLoginModal);
+    }
+    if (loginModal) {
+      loginModal.addEventListener('click', (e) => {
+        if (e.target === loginModal) closeLoginModal();
+      });
+    }
+    if (loginForm) {
+      loginForm.addEventListener('submit', handleLoginSubmit);
     }
   }
 
@@ -942,6 +984,182 @@ document.addEventListener('DOMContentLoaded', () => {
       .replace(/>/g, '&gt;')
       .replace(/"/g, '&quot;')
       .replace(/'/g, '&#039;');
+  }
+
+  /**
+   * ===================================================================
+   * COT-603: Xử lý luồng mở link mời phòng & Đăng nhập chuyển hướng
+   * ===================================================================
+   */
+
+  function updateUserAuthUi() {
+    const user = apiService.getCurrentUser();
+    if (user) {
+      if (userProfileBar) userProfileBar.style.display = 'flex';
+      if (openLoginModalBtn) openLoginModalBtn.style.display = 'none';
+      const nameEl = document.getElementById('currentUserName');
+      const eloEl = document.getElementById('currentUserElo');
+      if (nameEl) nameEl.textContent = user.displayName || user.username;
+      if (eloEl) eloEl.textContent = user.elo || 1200;
+    } else {
+      if (userProfileBar) userProfileBar.style.display = 'none';
+      if (openLoginModalBtn) openLoginModalBtn.style.display = 'inline-flex';
+    }
+  }
+
+  function handleLogout() {
+    apiService.setCurrentUser(null);
+    updateUserAuthUi();
+    showToast('Đã đăng xuất tài khoản. Bạn đang ở chế độ khách.', 'info');
+  }
+
+  function openLoginModal(pendingRoomCode = null) {
+    if (!loginModal) return;
+    if (pendingRoomCode) {
+      if (loginPendingRoomBanner) loginPendingRoomBanner.style.display = 'flex';
+      if (pendingRoomCodeDisplay) pendingRoomCodeDisplay.textContent = pendingRoomCode;
+    } else {
+      const storedPending = apiService.getPendingRoomInvite();
+      if (storedPending && loginPendingRoomBanner) {
+        loginPendingRoomBanner.style.display = 'flex';
+        if (pendingRoomCodeDisplay) pendingRoomCodeDisplay.textContent = storedPending;
+      } else if (loginPendingRoomBanner) {
+        loginPendingRoomBanner.style.display = 'none';
+      }
+    }
+    clearLoginErrors();
+    loginModal.style.display = 'flex';
+  }
+
+  function closeLoginModal() {
+    if (loginModal) loginModal.style.display = 'none';
+    clearLoginErrors();
+  }
+
+  function clearLoginErrors() {
+    if (loginUsernameError) {
+      loginUsernameError.textContent = '';
+      loginUsernameError.style.display = 'none';
+    }
+    if (loginPasswordError) {
+      loginPasswordError.textContent = '';
+      loginPasswordError.style.display = 'none';
+    }
+    loginUsernameInput?.classList.remove('input-error');
+    loginPasswordInput?.classList.remove('input-error');
+  }
+
+  async function handleLoginSubmit(e) {
+    e.preventDefault();
+    clearLoginErrors();
+
+    const username = loginUsernameInput ? loginUsernameInput.value.trim() : '';
+    const password = loginPasswordInput ? loginPasswordInput.value.trim() : '';
+
+    if (!username) {
+      if (loginUsernameError) {
+        loginUsernameError.textContent = 'Vui lòng nhập tên đăng nhập hoặc email.';
+        loginUsernameError.style.display = 'block';
+      }
+      loginUsernameInput?.classList.add('input-error');
+      loginUsernameInput?.focus();
+      return;
+    }
+
+    if (!password) {
+      if (loginPasswordError) {
+        loginPasswordError.textContent = 'Vui lòng nhập mật khẩu.';
+        loginPasswordError.style.display = 'block';
+      }
+      loginPasswordInput?.classList.add('input-error');
+      loginPasswordInput?.focus();
+      return;
+    }
+
+    // Hiển thị trạng thái đang xử lý
+    if (submitLoginBtn) submitLoginBtn.disabled = true;
+    if (loginSpinner) loginSpinner.style.display = 'inline-block';
+    if (loginBtnText) loginBtnText.textContent = 'Đang xử lý...';
+
+    try {
+      // Giả lập xác thực đăng nhập thành công
+      apiService.setCurrentUser({
+        id: 'user-sang-01',
+        username: username,
+        displayName: 'Nguyễn Tấn Sang',
+        elo: 1250,
+        isLoggedIn: true
+      });
+
+      updateUserAuthUi();
+      closeLoginModal();
+
+      // COT-603 AC 2: Sau khi đăng nhập thành công, kiểm tra thông tin phòng đã lưu trong phiên
+      const redirectResult = await apiService.handlePostLoginRoomRedirect();
+
+      if (redirectResult.hasPending) {
+        if (redirectResult.success && redirectResult.room) {
+          // Phòng còn hợp lệ: Đưa người dùng vào phòng chơi
+          openRoomModal(redirectResult.room, redirectResult.role, redirectResult.roleMessage);
+          showToast(redirectResult.roleMessage || 'Đã vào phòng từ liên kết mời thành công!', 'success');
+        } else {
+          // AC 3: Phòng đã đóng hoặc không khả dụng -> Hiển thị "Room không còn khả dụng"
+          showToast(redirectResult.error || 'Room không còn khả dụng.', 'error');
+        }
+      } else {
+        showToast('Đăng nhập thành công!', 'success');
+      }
+    } catch (err) {
+      showToast(err.message || 'Đăng nhập thất bại.', 'error');
+    } finally {
+      if (submitLoginBtn) submitLoginBtn.disabled = false;
+      if (loginSpinner) loginSpinner.style.display = 'none';
+      if (loginBtnText) loginBtnText.textContent = 'Đang Nhập & Vào Phòng';
+    }
+  }
+
+  /**
+   * COT-603 AC 1 & AC 3: Kiểm tra và xử lý khi người dùng mở trang qua link mời phòng
+   */
+  async function checkAndHandleInviteLinkOnLoad() {
+    if (typeof window === 'undefined' || !window.location) return;
+
+    const currentUrl = window.location.href;
+    const roomCode = apiService.extractRoomCodeFromUrl(currentUrl);
+
+    if (!roomCode) {
+      // Kiểm tra xem có phòng đang chờ trong session từ lần trước không
+      const pendingCode = apiService.getPendingRoomInvite();
+      if (pendingCode && apiService.getCurrentUser()) {
+        const postLoginResult = await apiService.handlePostLoginRoomRedirect();
+        if (postLoginResult.hasPending) {
+          if (postLoginResult.success && postLoginResult.room) {
+            openRoomModal(postLoginResult.room, postLoginResult.role, postLoginResult.roleMessage);
+            showToast(postLoginResult.roleMessage || 'Đã kết nối vào phòng từ phiên trước!', 'success');
+          } else {
+            showToast(postLoginResult.error || 'Room không còn khả dụng.', 'error');
+          }
+        }
+      }
+      return;
+    }
+
+    try {
+      const result = await apiService.handleOpenRoomLink(currentUrl);
+
+      if (result.action === 'REDIRECT_LOGIN') {
+        // AC 1: Chưa đăng nhập -> Chuyển hướng tới màn hình Đăng nhập & lưu phiên
+        openLoginModal(result.pendingRoomCode);
+        showToast(`Vui lòng đăng nhập để tham gia phòng [#${result.pendingRoomCode}]!`, 'info');
+      } else if (result.action === 'JOIN_SUCCESS' && result.room) {
+        // Đã đăng nhập -> Đưa vào phòng
+        openRoomModal(result.room, result.role, result.roleMessage);
+        showToast(result.roleMessage, 'success');
+      }
+    } catch (err) {
+      // AC 3: Báo lỗi "Room không còn khả dụng"
+      showToast(err.message || 'Room không còn khả dụng.', 'error');
+    }
   }
 
   // Khởi chạy

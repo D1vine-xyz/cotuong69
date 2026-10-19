@@ -487,6 +487,181 @@ class RoomApiService {
       zaloUrl: `https://zalo.me/share?url=${encodedUrl}&title=${encodedTitle}`
     };
   }
+
+  // =========================================================================
+  // COT-603: Xử lý luồng tự động tham gia phòng khi người dùng mở liên kết mời
+  // =========================================================================
+
+  /**
+   * Lưu thông tin phòng cần vào trong phiên (sessionStorage & in-memory)
+   */
+  savePendingRoomInvite(roomCode) {
+    if (!roomCode) return;
+    const cleanCode = String(roomCode).replace(/^#/, '').trim();
+    this.sessionPendingInvite = cleanCode;
+    if (typeof window !== 'undefined' && window.sessionStorage) {
+      try {
+        window.sessionStorage.setItem('cotuong_pending_room_invite', cleanCode);
+      } catch (e) {
+        console.warn('Lỗi ghi sessionStorage:', e);
+      }
+    }
+  }
+
+  /**
+   * Lấy thông tin phòng đã lưu trong phiên
+   */
+  getPendingRoomInvite() {
+    if (typeof window !== 'undefined' && window.sessionStorage) {
+      try {
+        const stored = window.sessionStorage.getItem('cotuong_pending_room_invite');
+        if (stored) return stored;
+      } catch (e) {}
+    }
+    return this.sessionPendingInvite || null;
+  }
+
+  /**
+   * Xóa thông tin phòng đã lưu trong phiên sau khi hoàn tất xử lý
+   */
+  clearPendingRoomInvite() {
+    this.sessionPendingInvite = null;
+    if (typeof window !== 'undefined' && window.sessionStorage) {
+      try {
+        window.sessionStorage.removeItem('cotuong_pending_room_invite');
+      } catch (e) {}
+    }
+  }
+
+  /**
+   * Phân tích và trích xuất mã phòng từ đường dẫn hoặc URL bất kỳ
+   * Hỗ trợ các định dạng:
+   *  - /room/:code
+   *  - https://domain.com/room/:code
+   *  - ?roomCode=:code hoặc ?room=:code
+   *  - #/room/:code
+   */
+  extractRoomCodeFromUrl(urlOrPath) {
+    if (!urlOrPath || typeof urlOrPath !== 'string') return null;
+
+    // 1. Dạng /room/123456 hoặc /room/123456?abc=1
+    const matchPath = urlOrPath.match(/\/room\/(\d{6})(?:[/?#]|$)/i);
+    if (matchPath) return matchPath[1];
+
+    // 2. Dạng query parameter ?roomCode=123456 hoặc ?room=123456
+    const matchQuery = urlOrPath.match(/[?&](?:roomCode|room|code)=(\d{6})(?:[&?#]|$)/i);
+    if (matchQuery) return matchQuery[1];
+
+    // 3. Nếu truyền trực tiếp mã 6 số
+    const cleanCode = urlOrPath.trim();
+    if (/^\d{6}$/.test(cleanCode)) return cleanCode;
+
+    return null;
+  }
+
+  /**
+   * COT-603 AC 1: Xử lý khi người dùng mở đường dẫn mời vào phòng (`/room/:code`)
+   * - Nếu đã đăng nhập: Tiếp tục luồng tham gia phòng bình thường.
+   * - Nếu chưa đăng nhập: Chuyển hướng tới màn hình Đăng nhập, lưu lại phòng trong phiên.
+   */
+  async handleOpenRoomLink(urlOrPath) {
+    const roomCode = this.extractRoomCodeFromUrl(urlOrPath);
+    if (!roomCode) {
+      const err = new Error('Đường dẫn phòng không hợp lệ hoặc mã phòng không đúng định dạng 6 số.');
+      err.code = 'INVALID_ROOM_LINK';
+      throw err;
+    }
+
+    const user = this.getCurrentUser();
+
+    // 1. Trường hợp người dùng chưa đăng nhập -> Chuyển hướng màn hình Đăng nhập & lưu phiên
+    if (!user) {
+      this.savePendingRoomInvite(roomCode);
+      return {
+        action: 'REDIRECT_LOGIN',
+        redirectUrl: `/login?redirect=/room/${roomCode}`,
+        pendingRoomCode: roomCode,
+        message: 'Yêu cầu đăng nhập trước khi tham gia phòng chơi.'
+      };
+    }
+
+    // 2. Trường hợp người dùng đã đăng nhập -> Tham gia phòng bình thường
+    return await this.joinRoomFromInvite(roomCode);
+  }
+
+  /**
+   * COT-603 AC 2 & AC 3: Thực hiện tham gia phòng từ link mời
+   * - Nếu phòng còn hợp lệ: Đưa người dùng trở lại đúng phòng chơi đó.
+   * - Nếu phòng đã đóng hoặc không còn tồn tại: Báo lỗi "Room không còn khả dụng".
+   * - Vai trò do máy chủ xác định theo trạng thái mới nhất (không dùng dữ liệu cũ).
+   */
+  async joinRoomFromInvite(roomCode) {
+    const cleanCode = String(roomCode).trim();
+    const room = this.roomsStore.find(r => r.code === cleanCode);
+
+    // Tiêu chí 3: Phòng không tồn tại hoặc đã đóng thì hiển thị "Room không còn khả dụng"
+    if (!room || room.status === 'CLOSED') {
+      const err = new Error('Room không còn khả dụng.');
+      err.code = 'ROOM_UNAVAILABLE';
+      throw err;
+    }
+
+    // Xác định vai trò theo trạng thái mới nhất từ hệ thống
+    let assignedRole = 'PLAYER';
+    let assignedSide = 'BLACK';
+    let roleMessage = 'Bạn tham gia phòng với vai trò Kỳ thủ Đối thủ (Quân Đen)!';
+
+    if (room.status === 'WAITING_OPPONENT' && !room.opponentId) {
+      assignedRole = 'PLAYER';
+      assignedSide = 'BLACK';
+      roleMessage = 'Bạn tham gia phòng với vai trò Kỳ thủ Đối thủ (Quân Đen)!';
+    } else {
+      assignedRole = 'SPECTATOR';
+      assignedSide = null;
+      roleMessage = 'Phòng đã đủ 2 kỳ thủ. Bạn tham gia phòng với vai trò Khán giả theo dõi ván cờ!';
+    }
+
+    return {
+      action: 'JOIN_SUCCESS',
+      success: true,
+      room,
+      role: assignedRole,
+      side: assignedSide,
+      canMove: assignedRole === 'PLAYER',
+      roleMessage
+    };
+  }
+
+  /**
+   * COT-603 AC 2: Sau khi người dùng đăng nhập thành công
+   * Kiểm tra lại thông tin phòng đã lưu trong phiên và tự động đưa vào phòng.
+   */
+  async handlePostLoginRoomRedirect() {
+    const pendingRoomCode = this.getPendingRoomInvite();
+    if (!pendingRoomCode) {
+      return { hasPending: false };
+    }
+
+    // Xóa khỏi session để không kích hoạt lặp lại
+    this.clearPendingRoomInvite();
+
+    try {
+      const joinResult = await this.joinRoomFromInvite(pendingRoomCode);
+      return {
+        hasPending: true,
+        pendingRoomCode,
+        ...joinResult
+      };
+    } catch (err) {
+      return {
+        hasPending: true,
+        pendingRoomCode,
+        success: false,
+        error: err.message || 'Room không còn khả dụng.',
+        code: err.code || 'ROOM_UNAVAILABLE'
+      };
+    }
+  }
 }
 
 // Xuất service cho browser hoặc Node.js test
