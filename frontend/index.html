@@ -27,12 +27,16 @@
       
       <div class="user-auth-wrapper">
         <div class="user-profile" id="userProfileBar">
-          <div class="user-avatar" id="currentUserAvatar">桑</div>
+          <div class="user-avatar" id="currentUserAvatar" title="Ảnh đại diện">桑</div>
           <div class="user-details">
             <span class="user-name" id="currentUserName">Nguyễn Tấn Sang</span>
-            <span class="user-elo">Elo: <strong id="currentUserElo">1250</strong></span>
+            <span class="user-elo">
+              <span class="elo-badge" id="currentUserEloBadge">
+                <span class="elo-star">★</span> Elo: <strong id="currentUserElo">1000</strong>
+              </span>
+            </span>
           </div>
-          <button type="button" id="headerLogoutBtn" class="btn-logout" title="Đăng xuất để thử nghiệm luồng mở link mời">Đăng xuất</button>
+          <button type="button" id="headerLogoutBtn" class="btn-logout" title="Đăng xuất khỏi tài khoản">Đăng xuất</button>
           <div class="status-indicator online" title="Đang kết nối Realtime"></div>
         </div>
         <button type="button" id="openLoginModalBtn" class="btn btn-gold btn-sm" style="display: none;">
@@ -45,6 +49,62 @@
   <main class="main-content">
     <div class="container">
       
+      <!-- COT-584: Khu vực điều hướng tính năng chính Sảnh chờ -->
+      <section class="lobby-navigation-section" aria-label="Điều hướng tính năng Sảnh chờ">
+        <div class="lobby-mode-cards-grid">
+          <!-- Khối 1: Chơi Online -->
+          <div class="lobby-mode-card is-active mode-gold" id="navPlayOnlineCard" role="button" tabindex="0" aria-label="Chơi Online - Thi đấu cờ tướng với kỳ thủ khác">
+            <div class="card-top-row">
+              <div class="mode-icon-box">🌐</div>
+              <span class="mode-tag-pill">Nhiều người chơi</span>
+              <span class="mode-badge-count" id="navOnlineRoomsBadge">5 phòng</span>
+            </div>
+            <div class="card-info">
+              <h3 class="mode-title">Chơi Online</h3>
+              <p class="mode-description">Thi đấu cờ Tướng trực tuyến đối kháng thời gian thực qua hệ thống phòng chơi công khai hoặc riêng tư.</p>
+            </div>
+            <div class="card-footer-action">
+              <span class="action-text">Xem danh sách phòng</span>
+              <span class="action-arrow">↓</span>
+            </div>
+          </div>
+
+          <!-- Khối 2: Chơi Với Máy (PvE) -->
+          <div class="lobby-mode-card mode-red" id="navPlayAiCard" role="button" tabindex="0" aria-label="Chơi Với Máy - Luyện tập cùng AI thông minh">
+            <div class="card-top-row">
+              <div class="mode-icon-box">🤖</div>
+              <span class="mode-tag-pill">PvE Không Tính Elo</span>
+              <span class="mode-badge-count new-pill">Mới</span>
+            </div>
+            <div class="card-info">
+              <h3 class="mode-title">Chơi Với Máy</h3>
+              <p class="mode-description">Luyện tập kỳ nghệ đối đầu AI cờ Tướng thông minh, tự do chọn phe Đỏ đi trước hoặc Đen máy đi trước.</p>
+            </div>
+            <div class="card-footer-action">
+              <span class="action-text">Bắt đầu trận đấu</span>
+              <span class="action-arrow">→</span>
+            </div>
+          </div>
+
+          <!-- Khối 3: Danh Sách Bạn Bè -->
+          <div class="lobby-mode-card mode-blue" id="navFriendsCard" role="button" tabindex="0" aria-label="Danh Sách Bạn Bè - Xem và mời bạn bè giao hữu">
+            <div class="card-top-row">
+              <div class="mode-icon-box">👥</div>
+              <span class="mode-tag-pill">Giao hữu</span>
+              <span class="mode-badge-count" id="navOnlineFriendsBadge">Online</span>
+            </div>
+            <div class="card-info">
+              <h3 class="mode-title">Danh Sách Bạn Bè</h3>
+              <p class="mode-description">Xem danh sách bạn bè đang trực tuyến, kết nối kỳ hữu và gửi lời mời giao lưu thi đấu nhanh chóng.</p>
+            </div>
+            <div class="card-footer-action">
+              <span class="action-text">Mở danh sách</span>
+              <span class="action-arrow">→</span>
+            </div>
+          </div>
+        </div>
+      </section>
+
       <!-- Top Action Bar: Search by 6-digit Code & Filters -->
       <section class="action-bar-section">
         <div class="join-by-code-card">
@@ -491,6 +551,75 @@
     </div>
   </div>
 
+  <!-- COT-638: Modal Bắt Đầu Trận Đấu PvE (Chơi Với Máy) -->
+  <div id="pveStartModal" class="modal-overlay" style="display: none;" role="dialog" aria-modal="true" aria-labelledby="pveModalHeading">
+    <div class="modal-card modal-card-pve">
+      <div class="modal-header">
+        <div class="modal-title-with-icon">
+          <span class="header-icon">🤖</span>
+          <h3 id="pveModalHeading">Bắt Đầu Trận Đấu Với Máy</h3>
+        </div>
+        <button type="button" id="closePveStartModalBtn" class="close-btn" aria-label="Đóng">&times;</button>
+      </div>
+
+      <form id="pveStartForm" class="pve-start-form" novalidate>
+        <div class="modal-body">
+          <p class="pve-guide-text">
+            Lựa chọn phe của bạn để bắt đầu ván cờ. Theo luật cờ Tướng quốc tế, <strong>phe Đỏ luôn đi trước</strong>.
+          </p>
+
+          <div id="pveStartError" class="input-error-msg" role="alert" style="display: none;"></div>
+
+          <!-- Lựa chọn phe Đỏ / Đen (TUYỆT ĐỐI KHÔNG CÓ ĐỘ KHÓ) -->
+          <div class="pve-color-selection-group">
+            <span class="selection-label">Chọn Phe Xuất Quân:</span>
+            <div class="color-cards-grid">
+              <!-- Phe Đỏ -->
+              <label id="pveSelectRedLabel" class="color-choice-card color-red is-selected">
+                <input type="radio" name="pvePlayerColor" id="pveSelectRed" value="red" checked>
+                <div class="choice-card-inner">
+                  <div class="chess-piece-symbol red" aria-hidden="true">帥</div>
+                  <div class="choice-info">
+                    <strong class="choice-title">Bên Đỏ (Bạn đi trước)</strong>
+                    <span class="choice-desc">Cầm quân Đỏ, chủ động ra quân nước đầu tiên</span>
+                  </div>
+                  <span class="choice-check">✓</span>
+                </div>
+              </label>
+
+              <!-- Phe Đen -->
+              <label id="pveSelectBlackLabel" class="color-choice-card color-black">
+                <input type="radio" name="pvePlayerColor" id="pveSelectBlack" value="black">
+                <div class="choice-card-inner">
+                  <div class="chess-piece-symbol black" aria-hidden="true">將</div>
+                  <div class="choice-info">
+                    <strong class="choice-title">Bên Đen (Máy đi trước)</strong>
+                    <span class="choice-desc">Cầm quân Đen, phòng thủ phản kích sau nước đi của máy</span>
+                  </div>
+                  <span class="choice-check">✓</span>
+                </div>
+              </label>
+            </div>
+          </div>
+
+          <div class="pve-rules-notice">
+            <span class="notice-icon">ℹ️</span>
+            <span class="notice-text">Trận đấu luyện tập với máy không tính điểm xếp hạng Elo.</span>
+          </div>
+        </div>
+
+        <div class="modal-footer">
+          <button type="button" id="cancelPveStartBtn" class="btn btn-secondary">Hủy Bỏ</button>
+          <button type="submit" id="submitStartPveBtn" class="btn btn-gold btn-large">
+            <span class="btn-spinner" id="pveStartSpinner" style="display: none;"></span>
+            <span id="pveStartBtnText">⚔️ Bắt Đầu Ván Đấu</span>
+          </button>
+        </div>
+      </form>
+    </div>
+  </div>
+
+  <script src="/js/pve.js"></script>
   <script type="module" src="/src/main.jsx"></script>
 </body>
 </html>
