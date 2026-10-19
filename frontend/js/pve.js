@@ -268,8 +268,139 @@
     }
   }
 
+  /**
+   * COT-639: Quản lý vòng đời và logic tương tác bàn cờ PvE
+   */
+  class PveGameController {
+    constructor(apiService = new PveApiService()) {
+      this.api = apiService;
+      this.match = null;
+      this.isBotThinkingState = false;
+      this.movePendingState = false;
+      this.listeners = [];
+    }
+
+    async startMatch({ playerColor }) {
+      const res = await this.api.createPveMatch({ playerColor });
+      if (res.success) {
+        this.match = res.match;
+        this.emitChange();
+        // Nếu bot là bên Đỏ (đi trước) -> Kích hoạt lượt bot ngay
+        if (this.match.playerColor === PVE_COLORS.BLACK && this.match.sideToMove === PVE_COLORS.RED) {
+          await this.triggerBotTurn();
+        }
+      }
+      return res;
+    }
+
+    async makePlayerMove({ from, to }) {
+      if (this.isBoardLocked()) {
+        const err = new Error('Bàn cờ đang bị khóa. Tuyệt đối không thể đi quân khi tới lượt máy.');
+        err.code = 'BOARD_LOCKED';
+        throw err;
+      }
+      this.movePendingState = true;
+      this.emitChange();
+      try {
+        const res = await this.api.submitMove(this.match.id, { from, to });
+        if (res.success) {
+          this.match = res.match;
+          this.emitChange();
+          if (this.match.status === 'PLAYING' && this.match.sideToMove === this.match.botColor) {
+            await this.triggerBotTurn();
+          }
+        }
+        return res;
+      } finally {
+        this.movePendingState = false;
+        this.emitChange();
+      }
+    }
+
+    async triggerBotTurn() {
+      this.isBotThinkingState = true;
+      this.emitChange();
+      try {
+        const res = await this.api.fetchBotMove(this.match.id);
+        if (res.success) {
+          this.match = res.match;
+        }
+        return res;
+      } finally {
+        this.isBotThinkingState = false;
+        this.emitChange();
+      }
+    }
+
+    async resign() {
+      if (!this.match || this.match.status !== 'PLAYING') return;
+      const res = await this.api.resignMatch(this.match.id);
+      if (res.success) {
+        this.match = res.match;
+        this.emitChange();
+      }
+      return res;
+    }
+
+    isPlayerTurn() {
+      return Boolean(this.match && this.match.status === 'PLAYING' && this.match.sideToMove === this.match.playerColor);
+    }
+
+    isBotThinking() {
+      return this.isBotThinkingState;
+    }
+
+    isBoardLocked() {
+      if (!this.match || this.match.status !== 'PLAYING') return true;
+      if (this.movePendingState) return true;
+      if (this.isBotThinkingState) return true;
+      if (!this.isPlayerTurn()) return true;
+      return false;
+    }
+
+    getBannerStatus() {
+      if (!this.match) return null;
+      if (this.isBotThinkingState || (!this.isPlayerTurn() && this.match.status === 'PLAYING')) {
+        return {
+          type: 'BOT_THINKING',
+          title: 'Máy đang đi...',
+          message: 'Máy chủ AI đang tính toán nước đi. Bàn cờ tạm thời bị khóa.'
+        };
+      }
+      if (this.isPlayerTurn()) {
+        return {
+          type: 'PLAYER_TURN',
+          title: 'Lượt của bạn',
+          message: `Đến lượt bạn cầm quân ${this.match.playerColor === 'red' ? 'Đỏ' : 'Đen'}`
+        };
+      }
+      return null;
+    }
+
+    onStateChange(callback) {
+      if (typeof callback === 'function') this.listeners.push(callback);
+    }
+
+    emitChange() {
+      for (const cb of this.listeners) {
+        try { cb(this.getSnapshot()); } catch (e) { console.error(e); }
+      }
+    }
+
+    getSnapshot() {
+      return {
+        match: this.match ? JSON.parse(JSON.stringify(this.match)) : null,
+        isPlayerTurn: this.isPlayerTurn(),
+        isBotThinking: this.isBotThinking(),
+        isBoardLocked: this.isBoardLocked(),
+        bannerStatus: this.getBannerStatus()
+      };
+    }
+  }
+
   return {
     PveApiService,
+    PveGameController,
     PVE_COLORS,
     PVE_RESULTS,
     PVE_END_REASONS,
