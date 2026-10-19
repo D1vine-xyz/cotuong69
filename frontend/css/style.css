@@ -1996,6 +1996,181 @@ body {
   font-weight: 700;
 }
 
+/* ===================================================================
+   COT-638: PvE (Chơi Với Máy) Start Modal & Color Choice Styles
+   =================================================================== */
+.modal-card-pve {
+  max-width: 520px;
+  width: 92%;
+}
+
+.pve-guide-text {
+  font-size: 13.5px;
+  color: var(--text-muted);
+  line-height: 1.5;
+  margin-bottom: 18px;
+}
+
+.pve-color-selection-group {
+  margin-bottom: 18px;
+}
+
+.pve-color-selection-group .selection-label {
+  display: block;
+  font-size: 13px;
+  font-weight: 700;
+  color: var(--text-highlight);
+  margin-bottom: 12px;
+}
+
+.color-cards-grid {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.color-choice-card {
+  display: block;
+  background: rgba(255, 255, 255, 0.03);
+  border: 1.5px solid rgba(255, 255, 255, 0.08);
+  border-radius: var(--radius-md);
+  padding: 14px 16px;
+  cursor: pointer;
+  transition: all 0.25s cubic-bezier(0.16, 1, 0.3, 1);
+  position: relative;
+}
+
+.color-choice-card input[type="radio"] {
+  position: absolute;
+  opacity: 0;
+  pointer-events: none;
+}
+
+.choice-card-inner {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+}
+
+.chess-piece-symbol {
+  width: 46px;
+  height: 46px;
+  border-radius: 50%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-family: 'Cinzel', serif;
+  font-size: 22px;
+  font-weight: 700;
+  box-shadow: 0 4px 10px rgba(0, 0, 0, 0.4);
+  flex-shrink: 0;
+  transition: transform 0.2s ease;
+}
+
+.chess-piece-symbol.red {
+  background: radial-gradient(circle, #ffe6d4 0%, #ffd0b5 60%, #e29367 100%);
+  color: #b91c1c;
+  border: 2px solid #b91c1c;
+  box-shadow: 0 0 12px rgba(220, 38, 38, 0.35);
+}
+
+.chess-piece-symbol.black {
+  background: radial-gradient(circle, #334155 0%, #1e293b 60%, #0f172a 100%);
+  color: #f1f5f9;
+  border: 2px solid #94a3b8;
+  box-shadow: 0 0 12px rgba(148, 163, 184, 0.25);
+}
+
+.color-choice-card:hover .chess-piece-symbol {
+  transform: scale(1.08);
+}
+
+.choice-info {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+}
+
+.choice-title {
+  font-size: 14.5px;
+  font-weight: 700;
+  color: var(--text-main);
+  margin-bottom: 2px;
+}
+
+.choice-desc {
+  font-size: 12px;
+  color: var(--text-muted);
+}
+
+.choice-check {
+  width: 24px;
+  height: 24px;
+  border-radius: 50%;
+  background: rgba(255, 255, 255, 0.05);
+  border: 1.5px solid rgba(255, 255, 255, 0.15);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 13px;
+  color: transparent;
+  transition: all 0.2s ease;
+}
+
+.color-choice-card:hover {
+  background: rgba(255, 255, 255, 0.06);
+  border-color: rgba(223, 177, 91, 0.4);
+}
+
+.color-choice-card.is-selected {
+  background: rgba(223, 177, 91, 0.08);
+  border-color: var(--gold-primary);
+  box-shadow: 0 0 16px rgba(223, 177, 91, 0.2);
+}
+
+.color-choice-card.color-red.is-selected {
+  background: rgba(220, 38, 38, 0.08);
+  border-color: #ef4444;
+  box-shadow: 0 0 18px rgba(239, 68, 68, 0.25);
+}
+
+.color-choice-card.color-red.is-selected .choice-title {
+  color: #f87171;
+}
+
+.color-choice-card.color-black.is-selected {
+  background: rgba(56, 139, 253, 0.08);
+  border-color: #388bfd;
+  box-shadow: 0 0 18px rgba(56, 139, 253, 0.25);
+}
+
+.color-choice-card.color-black.is-selected .choice-title {
+  color: #60a5fa;
+}
+
+.color-choice-card.is-selected .choice-check {
+  background: var(--gold-primary);
+  border-color: var(--gold-primary);
+  color: #111;
+  font-weight: 700;
+}
+
+.pve-rules-notice {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  background: rgba(255, 255, 255, 0.03);
+  border: 1px dashed rgba(255, 255, 255, 0.12);
+  border-radius: var(--radius-sm);
+  padding: 10px 14px;
+  font-size: 12px;
+  color: var(--text-muted);
+}
+
+.pve-rules-notice .notice-icon {
+  font-size: 16px;
+}
+
 
 
 

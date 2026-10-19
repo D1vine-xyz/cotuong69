@@ -551,6 +551,75 @@
     </div>
   </div>
 
+  <!-- COT-638: Modal Bắt Đầu Trận Đấu PvE (Chơi Với Máy) -->
+  <div id="pveStartModal" class="modal-overlay" style="display: none;" role="dialog" aria-modal="true" aria-labelledby="pveModalHeading">
+    <div class="modal-card modal-card-pve">
+      <div class="modal-header">
+        <div class="modal-title-with-icon">
+          <span class="header-icon">🤖</span>
+          <h3 id="pveModalHeading">Bắt Đầu Trận Đấu Với Máy</h3>
+        </div>
+        <button type="button" id="closePveStartModalBtn" class="close-btn" aria-label="Đóng">&times;</button>
+      </div>
+
+      <form id="pveStartForm" class="pve-start-form" novalidate>
+        <div class="modal-body">
+          <p class="pve-guide-text">
+            Lựa chọn phe của bạn để bắt đầu ván cờ. Theo luật cờ Tướng quốc tế, <strong>phe Đỏ luôn đi trước</strong>.
+          </p>
+
+          <div id="pveStartError" class="input-error-msg" role="alert" style="display: none;"></div>
+
+          <!-- Lựa chọn phe Đỏ / Đen (TUYỆT ĐỐI KHÔNG CÓ ĐỘ KHÓ) -->
+          <div class="pve-color-selection-group">
+            <span class="selection-label">Chọn Phe Xuất Quân:</span>
+            <div class="color-cards-grid">
+              <!-- Phe Đỏ -->
+              <label id="pveSelectRedLabel" class="color-choice-card color-red is-selected">
+                <input type="radio" name="pvePlayerColor" id="pveSelectRed" value="red" checked>
+                <div class="choice-card-inner">
+                  <div class="chess-piece-symbol red" aria-hidden="true">帥</div>
+                  <div class="choice-info">
+                    <strong class="choice-title">Bên Đỏ (Bạn đi trước)</strong>
+                    <span class="choice-desc">Cầm quân Đỏ, chủ động ra quân nước đầu tiên</span>
+                  </div>
+                  <span class="choice-check">✓</span>
+                </div>
+              </label>
+
+              <!-- Phe Đen -->
+              <label id="pveSelectBlackLabel" class="color-choice-card color-black">
+                <input type="radio" name="pvePlayerColor" id="pveSelectBlack" value="black">
+                <div class="choice-card-inner">
+                  <div class="chess-piece-symbol black" aria-hidden="true">將</div>
+                  <div class="choice-info">
+                    <strong class="choice-title">Bên Đen (Máy đi trước)</strong>
+                    <span class="choice-desc">Cầm quân Đen, phòng thủ phản kích sau nước đi của máy</span>
+                  </div>
+                  <span class="choice-check">✓</span>
+                </div>
+              </label>
+            </div>
+          </div>
+
+          <div class="pve-rules-notice">
+            <span class="notice-icon">ℹ️</span>
+            <span class="notice-text">Trận đấu luyện tập với máy không tính điểm xếp hạng Elo.</span>
+          </div>
+        </div>
+
+        <div class="modal-footer">
+          <button type="button" id="cancelPveStartBtn" class="btn btn-secondary">Hủy Bỏ</button>
+          <button type="submit" id="submitStartPveBtn" class="btn btn-gold btn-large">
+            <span class="btn-spinner" id="pveStartSpinner" style="display: none;"></span>
+            <span id="pveStartBtnText">⚔️ Bắt Đầu Ván Đấu</span>
+          </button>
+        </div>
+      </form>
+    </div>
+  </div>
+
+  <script src="/js/pve.js"></script>
   <script type="module" src="/src/main.jsx"></script>
 </body>
 </html>
