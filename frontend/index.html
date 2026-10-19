@@ -485,6 +485,9 @@
               value="12345678"
             >
             <div id="loginPasswordError" class="input-error-msg" role="alert"></div>
+            <div class="login-sub-actions">
+              <a href="#" id="openForgotPasswordLink" class="forgot-password-link">Quên mật khẩu?</a>
+            </div>
           </div>
         </div>
 
@@ -493,6 +496,153 @@
           <button type="submit" id="submitLoginBtn" class="btn btn-primary btn-large">
             <span class="btn-spinner" id="loginSpinner" style="display: none;"></span>
             <span id="loginBtnText">Đăng Nhập & Vào Phòng</span>
+          </button>
+        </div>
+      </form>
+    </div>
+  </div>
+
+  <!-- COT-583: Forgot Password Modal -->
+  <div id="forgotPasswordModal" class="modal-overlay" style="display: none;" role="dialog" aria-modal="true" aria-labelledby="forgotModalHeading">
+    <div class="modal-card modal-card-auth">
+      <div class="modal-header">
+        <div class="modal-title-with-icon">
+          <span class="header-icon">🔑</span>
+          <h3 id="forgotModalHeading">Khôi Phục Mật Khẩu</h3>
+        </div>
+        <button id="closeForgotPasswordModalBtn" class="close-btn" aria-label="Đóng">&times;</button>
+      </div>
+
+      <form id="forgotPasswordForm" class="auth-form" novalidate>
+        <div class="modal-body">
+          <p class="auth-guide-text">
+            Nhập địa chỉ email tài khoản của bạn. Hệ thống sẽ gửi liên kết và mã xác thực để đặt lại mật khẩu mới.
+          </p>
+
+          <!-- AC 2: Thông báo chung an toàn sau khi gửi request -->
+          <div id="forgotStatusBanner" class="auth-status-banner auth-status-success" style="display: none;" role="status">
+            <span class="banner-icon">📩</span>
+            <div class="banner-text">
+              <strong>Yêu cầu đã được tiếp nhận:</strong>
+              <p id="forgotStatusMsg">Nếu email tồn tại trong hệ thống, hướng dẫn đặt lại mật khẩu đã được gửi đến hộp thư của bạn.</p>
+            </div>
+          </div>
+
+          <div class="form-group" id="forgotEmailGroup">
+            <label for="forgotEmailInput" class="form-label">
+              Email Tài Khoản <span class="required-star">*</span>
+            </label>
+            <input 
+              type="email" 
+              id="forgotEmailInput" 
+              name="email" 
+              class="form-input" 
+              placeholder="kythu@cotuong.com" 
+              autocomplete="email"
+            >
+            <div id="forgotEmailError" class="input-error-msg" role="alert"></div>
+          </div>
+        </div>
+
+        <div class="modal-footer auth-modal-footer">
+          <button type="button" id="backToLoginFromForgotBtn" class="btn btn-secondary">
+            <span>← Quay Lại Đăng Nhập</span>
+          </button>
+          <button type="submit" id="submitForgotBtn" class="btn btn-gold btn-large">
+            <span class="btn-spinner" id="forgotSpinner" style="display: none;"></span>
+            <span id="forgotBtnText">Gửi Yêu Cầu</span>
+          </button>
+        </div>
+      </form>
+    </div>
+  </div>
+
+  <!-- COT-583: Reset Password Modal -->
+  <div id="resetPasswordModal" class="modal-overlay" style="display: none;" role="dialog" aria-modal="true" aria-labelledby="resetModalHeading">
+    <div class="modal-card modal-card-auth">
+      <div class="modal-header">
+        <div class="modal-title-with-icon">
+          <span class="header-icon">🛡️</span>
+          <h3 id="resetModalHeading">Đặt Lại Mật Khẩu Mới</h3>
+        </div>
+        <button id="closeResetPasswordModalBtn" class="close-btn" aria-label="Đóng">&times;</button>
+      </div>
+
+      <form id="resetPasswordForm" class="auth-form" novalidate>
+        <div class="modal-body">
+          <!-- AC 4: Banner báo lỗi Token khi hết hạn / đã dùng / không hợp lệ -->
+          <div id="resetTokenErrorBanner" class="auth-status-banner auth-status-error" style="display: none;" role="alert">
+            <span class="banner-icon">⚠️</span>
+            <div class="banner-text">
+              <strong id="resetTokenErrorTitle">Liên kết không hợp lệ</strong>
+              <p id="resetTokenErrorMsg">Mã xác thực đã hết hạn hoặc không tồn tại. Vui lòng gửi lại yêu cầu Quên mật khẩu mới.</p>
+            </div>
+          </div>
+
+          <!-- AC 5: Banner thông báo thành công -->
+          <div id="resetSuccessBanner" class="auth-status-banner auth-status-success" style="display: none;" role="status">
+            <span class="banner-icon">✅</span>
+            <div class="banner-text">
+              <strong>Thành công!</strong>
+              <p id="resetSuccessMsg">Đặt lại mật khẩu thành công. Hệ thống đang chuyển về màn hình Đăng nhập...</p>
+            </div>
+          </div>
+
+          <div id="resetInputsArea">
+            <input type="hidden" id="resetTokenInput" name="token">
+
+            <div class="form-group">
+              <label for="newPasswordInput" class="form-label">
+                Mật Khẩu Mới <span class="required-star">*</span>
+              </label>
+              <input 
+                type="password" 
+                id="newPasswordInput" 
+                name="newPassword" 
+                class="form-input" 
+                placeholder="Nhập mật khẩu mới..."
+                autocomplete="new-password"
+              >
+              <div id="newPasswordError" class="input-error-msg" role="alert"></div>
+            </div>
+
+            <div class="form-group">
+              <label for="confirmPasswordInput" class="form-label">
+                Xác Nhận Mật Khẩu <span class="required-star">*</span>
+              </label>
+              <input 
+                type="password" 
+                id="confirmPasswordInput" 
+                name="confirmPassword" 
+                class="form-input" 
+                placeholder="Nhập lại mật khẩu mới..."
+                autocomplete="new-password"
+              >
+              <div id="confirmPasswordError" class="input-error-msg" role="alert"></div>
+            </div>
+
+            <!-- Checklist quy tắc mật khẩu -->
+            <div class="password-checklist">
+              <div class="checklist-item" id="chkLength">
+                <span class="chk-icon">○</span> Tối thiểu 8 ký tự
+              </div>
+              <div class="checklist-item" id="chkAlphaNum">
+                <span class="chk-icon">○</span> Chứa cả chữ cái và chữ số
+              </div>
+              <div class="checklist-item" id="chkMatch">
+                <span class="chk-icon">○</span> Mật khẩu xác nhận trùng khớp
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <div class="modal-footer auth-modal-footer">
+          <button type="button" id="backToLoginFromResetBtn" class="btn btn-secondary">
+            <span>Đăng Nhập</span>
+          </button>
+          <button type="submit" id="submitResetBtn" class="btn btn-gold btn-large">
+            <span class="btn-spinner" id="resetSpinner" style="display: none;"></span>
+            <span id="resetBtnText">Xác Nhận Đổi Mật Khẩu</span>
           </button>
         </div>
       </form>
@@ -551,6 +701,7 @@
     </div>
   </div>
 
+  <script src="/js/auth.js"></script>
   <!-- COT-638: Modal Bắt Đầu Trận Đấu PvE (Chơi Với Máy) -->
   <div id="pveStartModal" class="modal-overlay" style="display: none;" role="dialog" aria-modal="true" aria-labelledby="pveModalHeading">
     <div class="modal-card modal-card-pve">

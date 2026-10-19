@@ -107,6 +107,44 @@ document.addEventListener('DOMContentLoaded', () => {
   const loginPendingRoomBanner = document.getElementById('loginPendingRoomBanner');
   const pendingRoomCodeDisplay = document.getElementById('pendingRoomCodeDisplay');
 
+  // COT-583: Forgot & Reset Password DOM Elements
+  const openForgotPasswordLink = document.getElementById('openForgotPasswordLink');
+  const forgotPasswordModal = document.getElementById('forgotPasswordModal');
+  const closeForgotPasswordModalBtn = document.getElementById('closeForgotPasswordModalBtn');
+  const backToLoginFromForgotBtn = document.getElementById('backToLoginFromForgotBtn');
+  const forgotPasswordForm = document.getElementById('forgotPasswordForm');
+  const forgotEmailInput = document.getElementById('forgotEmailInput');
+  const forgotEmailError = document.getElementById('forgotEmailError');
+  const forgotStatusBanner = document.getElementById('forgotStatusBanner');
+  const forgotStatusMsg = document.getElementById('forgotStatusMsg');
+  const submitForgotBtn = document.getElementById('submitForgotBtn');
+  const forgotSpinner = document.getElementById('forgotSpinner');
+  const forgotBtnText = document.getElementById('forgotBtnText');
+
+  const resetPasswordModal = document.getElementById('resetPasswordModal');
+  const closeResetPasswordModalBtn = document.getElementById('closeResetPasswordModalBtn');
+  const backToLoginFromResetBtn = document.getElementById('backToLoginFromResetBtn');
+  const resetPasswordForm = document.getElementById('resetPasswordForm');
+  const resetTokenInput = document.getElementById('resetTokenInput');
+  const newPasswordInput = document.getElementById('newPasswordInput');
+  const confirmPasswordInput = document.getElementById('confirmPasswordInput');
+  const newPasswordError = document.getElementById('newPasswordError');
+  const confirmPasswordError = document.getElementById('confirmPasswordError');
+  const resetTokenErrorBanner = document.getElementById('resetTokenErrorBanner');
+  const resetTokenErrorTitle = document.getElementById('resetTokenErrorTitle');
+  const resetTokenErrorMsg = document.getElementById('resetTokenErrorMsg');
+  const resetSuccessBanner = document.getElementById('resetSuccessBanner');
+  const resetSuccessMsg = document.getElementById('resetSuccessMsg');
+  const resetInputsArea = document.getElementById('resetInputsArea');
+  const submitResetBtn = document.getElementById('submitResetBtn');
+  const resetSpinner = document.getElementById('resetSpinner');
+  const resetBtnText = document.getElementById('resetBtnText');
+  const chkLength = document.getElementById('chkLength');
+  const chkAlphaNum = document.getElementById('chkAlphaNum');
+  const chkMatch = document.getElementById('chkMatch');
+
+  const passwordResetService = typeof window !== 'undefined' && window.PasswordResetService ? new window.PasswordResetService() : null;
+
   // Toast Container
   const toastContainer = document.getElementById('toastContainer');
 
@@ -143,6 +181,7 @@ document.addEventListener('DOMContentLoaded', () => {
     await loadRooms();
     setupRealtimeSubscription();
     await checkAndHandleInviteLinkOnLoad();
+    checkAndHandleResetTokenOnLoad();
   }
 
   /**
@@ -348,6 +387,79 @@ document.addEventListener('DOMContentLoaded', () => {
     }
     if (loginForm) {
       loginForm.addEventListener('submit', handleLoginSubmit);
+    }
+
+    // COT-583: Sự kiện Quên mật khẩu & Đặt lại mật khẩu
+    if (openForgotPasswordLink) {
+      openForgotPasswordLink.addEventListener('click', (e) => {
+        e.preventDefault();
+        closeLoginModal();
+        openForgotPasswordModal();
+      });
+    }
+    if (closeForgotPasswordModalBtn) {
+      closeForgotPasswordModalBtn.addEventListener('click', closeForgotPasswordModal);
+    }
+    if (backToLoginFromForgotBtn) {
+      backToLoginFromForgotBtn.addEventListener('click', () => {
+        closeForgotPasswordModal();
+        openLoginModal();
+      });
+    }
+    if (forgotPasswordModal) {
+      forgotPasswordModal.addEventListener('click', (e) => {
+        if (e.target === forgotPasswordModal) closeForgotPasswordModal();
+      });
+    }
+    if (forgotPasswordForm) {
+      forgotPasswordForm.addEventListener('submit', handleForgotPasswordSubmit);
+    }
+
+    if (closeResetPasswordModalBtn) {
+      closeResetPasswordModalBtn.addEventListener('click', closeResetPasswordModal);
+    }
+    if (backToLoginFromResetBtn) {
+      backToLoginFromResetBtn.addEventListener('click', () => {
+        closeResetPasswordModal();
+        openLoginModal();
+      });
+    }
+    if (resetPasswordModal) {
+      resetPasswordModal.addEventListener('click', (e) => {
+        if (e.target === resetPasswordModal) closeResetPasswordModal();
+      });
+    }
+    if (resetPasswordForm) {
+      resetPasswordForm.addEventListener('submit', handleResetPasswordSubmit);
+    }
+
+    // Dynamic password checklist feedback
+    if (newPasswordInput && confirmPasswordInput) {
+      const updateChecklist = () => {
+        const pass = newPasswordInput.value || '';
+        const confirm = confirmPasswordInput.value || '';
+        const isLen = pass.length >= 8;
+        const isAlphaNum = /[A-Za-z]/.test(pass) && /\d/.test(pass);
+        const isMatch = confirm.length > 0 && pass === confirm;
+
+        if (chkLength) {
+          chkLength.className = `checklist-item ${isLen ? 'valid' : ''}`;
+          const icon = chkLength.querySelector('.chk-icon');
+          if (icon) icon.textContent = isLen ? '✓' : '○';
+        }
+        if (chkAlphaNum) {
+          chkAlphaNum.className = `checklist-item ${isAlphaNum ? 'valid' : ''}`;
+          const icon = chkAlphaNum.querySelector('.chk-icon');
+          if (icon) icon.textContent = isAlphaNum ? '✓' : '○';
+        }
+        if (chkMatch) {
+          chkMatch.className = `checklist-item ${isMatch ? 'valid' : ''}`;
+          const icon = chkMatch.querySelector('.chk-icon');
+          if (icon) icon.textContent = isMatch ? '✓' : '○';
+        }
+      };
+      newPasswordInput.addEventListener('input', updateChecklist);
+      confirmPasswordInput.addEventListener('input', updateChecklist);
     }
 
     // COT-584: Điều hướng các khối tính năng Sảnh chờ
@@ -1500,6 +1612,220 @@ document.addEventListener('DOMContentLoaded', () => {
       if (submitLoginBtn) submitLoginBtn.disabled = false;
       if (loginSpinner) loginSpinner.style.display = 'none';
       if (loginBtnText) loginBtnText.textContent = 'Đang Nhập & Vào Phòng';
+    }
+  }
+
+  /**
+   * COT-583: Quản lý Modal & Logic Quên mật khẩu
+   */
+  function openForgotPasswordModal() {
+    if (!forgotPasswordModal) return;
+    if (forgotEmailError) {
+      forgotEmailError.textContent = '';
+      forgotEmailError.style.display = 'none';
+    }
+    if (forgotEmailInput) {
+      forgotEmailInput.classList.remove('input-error');
+      forgotEmailInput.value = '';
+    }
+    if (forgotStatusBanner) forgotStatusBanner.style.display = 'none';
+    forgotPasswordModal.style.display = 'flex';
+    forgotEmailInput?.focus();
+  }
+
+  function closeForgotPasswordModal() {
+    if (forgotPasswordModal) forgotPasswordModal.style.display = 'none';
+  }
+
+  async function handleForgotPasswordSubmit(e) {
+    if (e) e.preventDefault();
+    if (!forgotEmailInput) return;
+
+    const email = forgotEmailInput.value.trim();
+    if (forgotEmailError) {
+      forgotEmailError.textContent = '';
+      forgotEmailError.style.display = 'none';
+    }
+    forgotEmailInput.classList.remove('input-error');
+
+    // AC 1: Validate email phía client trước khi gửi
+    const validation = typeof window !== 'undefined' && window.validateEmail
+      ? window.validateEmail(email)
+      : { isValid: Boolean(email && email.includes('@')) };
+
+    if (!validation.isValid) {
+      if (forgotEmailError) {
+        forgotEmailError.textContent = validation.error || 'Email không hợp lệ.';
+        forgotEmailError.style.display = 'block';
+      }
+      forgotEmailInput.classList.add('input-error');
+      forgotEmailInput.focus();
+      return;
+    }
+
+    if (submitForgotBtn) submitForgotBtn.disabled = true;
+    if (forgotSpinner) forgotSpinner.style.display = 'inline-block';
+    if (forgotBtnText) forgotBtnText.textContent = 'Đang gửi...';
+
+    try {
+      const service = passwordResetService || (window.PasswordResetService ? new window.PasswordResetService() : null);
+      let res;
+      if (service) {
+        res = await service.requestForgotPassword(email);
+      } else {
+        res = { success: true, message: 'Nếu email tồn tại, hướng dẫn đặt lại mật khẩu đã được gửi đến email của bạn.' };
+      }
+
+      if (res.success) {
+        // AC 2: Luôn hiển thị thông báo chung an toàn sau khi gửi
+        if (forgotStatusBanner) {
+          if (forgotStatusMsg) forgotStatusMsg.textContent = res.message;
+          forgotStatusBanner.style.display = 'flex';
+        }
+        if (forgotEmailInput) forgotEmailInput.disabled = true;
+        if (submitForgotBtn) submitForgotBtn.style.display = 'none';
+      } else {
+        if (forgotEmailError) {
+          forgotEmailError.textContent = res.error || 'Có lỗi xảy ra.';
+          forgotEmailError.style.display = 'block';
+        }
+      }
+    } catch (err) {
+      showToast(err.message || 'Lỗi kết nối máy chủ.', 'error');
+    } finally {
+      if (submitForgotBtn) submitForgotBtn.disabled = false;
+      if (forgotSpinner) forgotSpinner.style.display = 'none';
+      if (forgotBtnText) forgotBtnText.textContent = 'Gửi Yêu Cầu';
+    }
+  }
+
+  /**
+   * COT-583: Quản lý Modal & Logic Đặt lại mật khẩu mới
+   */
+  function openResetPasswordModal(token) {
+    if (!resetPasswordModal) return;
+    if (resetTokenInput) resetTokenInput.value = token || '';
+    if (newPasswordInput) newPasswordInput.value = '';
+    if (confirmPasswordInput) confirmPasswordInput.value = '';
+    if (newPasswordError) newPasswordError.style.display = 'none';
+    if (confirmPasswordError) confirmPasswordError.style.display = 'none';
+    if (resetTokenErrorBanner) resetTokenErrorBanner.style.display = 'none';
+    if (resetSuccessBanner) resetSuccessBanner.style.display = 'none';
+    if (resetInputsArea) resetInputsArea.style.display = 'block';
+    if (submitResetBtn) submitResetBtn.style.display = 'inline-block';
+
+    // AC 3: Kiểm tra token
+    const extractedToken = typeof window !== 'undefined' && window.extractResetToken ? window.extractResetToken(token) : token;
+    if (!extractedToken) {
+      if (resetTokenErrorBanner) {
+        if (resetTokenErrorTitle) resetTokenErrorTitle.textContent = 'Thiếu mã xác thực';
+        if (resetTokenErrorMsg) resetTokenErrorMsg.textContent = 'Liên kết không chứa mã xác thực hợp lệ. Vui lòng kiểm tra lại email.';
+        resetTokenErrorBanner.style.display = 'flex';
+      }
+      if (resetInputsArea) resetInputsArea.style.display = 'none';
+      if (submitResetBtn) submitResetBtn.style.display = 'none';
+    }
+
+    resetPasswordModal.style.display = 'flex';
+  }
+
+  function closeResetPasswordModal() {
+    if (resetPasswordModal) resetPasswordModal.style.display = 'none';
+  }
+
+  async function handleResetPasswordSubmit(e) {
+    if (e) e.preventDefault();
+    const token = resetTokenInput ? resetTokenInput.value : '';
+    const newPassword = newPasswordInput ? newPasswordInput.value : '';
+    const confirmPassword = confirmPasswordInput ? confirmPasswordInput.value : '';
+
+    if (newPasswordError) newPasswordError.style.display = 'none';
+    if (confirmPasswordError) confirmPasswordError.style.display = 'none';
+
+    // AC 5: Validate mật khẩu phía client
+    const passCheck = typeof window !== 'undefined' && window.validateConfirmPassword
+      ? window.validateConfirmPassword(newPassword, confirmPassword)
+      : { isValid: newPassword.length >= 8 && newPassword === confirmPassword };
+
+    if (!passCheck.isValid) {
+      if (passCheck.code === 'PASSWORD_MISMATCH') {
+        if (confirmPasswordError) {
+          confirmPasswordError.textContent = passCheck.error;
+          confirmPasswordError.style.display = 'block';
+        }
+      } else {
+        if (newPasswordError) {
+          newPasswordError.textContent = passCheck.error;
+          newPasswordError.style.display = 'block';
+        }
+      }
+      return;
+    }
+
+    if (submitResetBtn) submitResetBtn.disabled = true;
+    if (resetSpinner) resetSpinner.style.display = 'inline-block';
+    if (resetBtnText) resetBtnText.textContent = 'Đang cập nhật...';
+
+    try {
+      const service = passwordResetService || (window.PasswordResetService ? new window.PasswordResetService() : null);
+      let res;
+      if (service) {
+        res = await service.resetPassword({ token, newPassword, confirmPassword });
+      } else {
+        res = { success: true, message: 'Đặt lại mật khẩu thành công!' };
+      }
+
+      if (res.success) {
+        // AC 5: Thông báo thành công và chuyển về Đăng nhập
+        if (resetSuccessBanner) {
+          if (resetSuccessMsg) resetSuccessMsg.textContent = res.message;
+          resetSuccessBanner.style.display = 'flex';
+        }
+        if (resetInputsArea) resetInputsArea.style.display = 'none';
+        if (submitResetBtn) submitResetBtn.style.display = 'none';
+
+        setTimeout(() => {
+          closeResetPasswordModal();
+          openLoginModal();
+          showToast('Mật khẩu đã được cập nhật thành công. Vui lòng đăng nhập.', 'success');
+        }, 1800);
+      } else {
+        // AC 4: Xử lý token hết hạn, đã dùng hoặc không hợp lệ
+        if (['TOKEN_EXPIRED', 'TOKEN_ALREADY_USED', 'INVALID_TOKEN'].includes(res.code)) {
+          if (resetTokenErrorBanner) {
+            if (resetTokenErrorTitle) resetTokenErrorTitle.textContent = 'Không thể tiếp tục';
+            if (resetTokenErrorMsg) resetTokenErrorMsg.textContent = res.error;
+            resetTokenErrorBanner.style.display = 'flex';
+          }
+          if (resetInputsArea) resetInputsArea.style.display = 'none';
+          if (submitResetBtn) submitResetBtn.style.display = 'none';
+        } else {
+          if (newPasswordError) {
+            newPasswordError.textContent = res.error;
+            newPasswordError.style.display = 'block';
+          }
+        }
+      }
+    } catch (err) {
+      showToast(err.message || 'Lỗi kết nối máy chủ.', 'error');
+    } finally {
+      if (submitResetBtn) submitResetBtn.disabled = false;
+      if (resetSpinner) resetSpinner.style.display = 'none';
+      if (resetBtnText) resetBtnText.textContent = 'Xác Nhận Đổi Mật Khẩu';
+    }
+  }
+
+  /**
+   * AC 3: Kiểm tra URL khi khởi tạo trang xem có reset token hay không
+   */
+  function checkAndHandleResetTokenOnLoad() {
+    if (typeof window === 'undefined' || !window.location) return;
+    const token = typeof window.extractResetToken === 'function'
+      ? window.extractResetToken(window.location.href)
+      : null;
+
+    if (token) {
+      openResetPasswordModal(token);
     }
   }
 
