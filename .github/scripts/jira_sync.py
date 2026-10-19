@@ -15,6 +15,7 @@ def main():
     ref_type = os.environ.get("REF_TYPE", "")
     ref_name = os.environ.get("REF_NAME", "")
     pr_title = os.environ.get("PR_TITLE", "")
+    pr_body = os.environ.get("PR_BODY", "")
     pr_merged = os.environ.get("PR_MERGED", "false").lower() == "true"
     commit_messages = os.environ.get("COMMIT_MESSAGES", "")
     input_issue = os.environ.get("INPUT_ISSUE_KEY", "")
@@ -36,7 +37,7 @@ def main():
         print("ℹ️ Phát hiện thao tác REVERT Pull Request / Commit.")
 
     transition_id = None
-    text_to_search = f"{ref_name} {pr_title} {commit_messages} {input_issue}"
+    text_to_search = f"{ref_name} {pr_title} {pr_body} {commit_messages} {input_issue}"
 
     if event_name == "workflow_dispatch":
         transition_id = input_transition

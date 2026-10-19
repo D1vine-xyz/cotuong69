@@ -5,13 +5,18 @@ on:
     types: [opened, synchronize, reopened]
 
 permissions:
+  contents: write
   pull-requests: write
   issues: write
-  contents: read
 
 jobs:
   test_and_verify:
+    name: Test and Verify
     runs-on: ubuntu-latest
+    permissions:
+      contents: write
+      pull-requests: write
+      issues: write
     steps:
       - name: Checkout Code
         uses: actions/checkout@v4
@@ -73,6 +78,7 @@ jobs:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           PR_NUMBER: ${{ github.event.pull_request.number }}
           PR_TITLE: ${{ github.event.pull_request.title }}
+          PR_BODY: ${{ github.event.pull_request.body }}
           PR_URL: ${{ github.event.pull_request.html_url }}
           PR_AUTHOR: ${{ github.event.pull_request.user.login }}
           PR_BRANCH: ${{ github.head_ref || github.event.pull_request.head.ref }}
@@ -80,3 +86,32 @@ jobs:
           BACKEND_OUTCOME: ${{ steps.test_backend.outcome }}
           FRONTEND_OUTCOME: ${{ steps.build_frontend.outcome }}
         run: python3 .github/scripts/ai_pr_tester.py
+
+  auto_merge:
+    name: Auto Merge on Pass
+    needs: test_and_verify
+    if: success()
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+      pull-requests: write
+      issues: write
+    steps:
+      - name: Checkout Code
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.x'
+
+      - name: Execute Auto Merge
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          REPOSITORY: ${{ github.repository }}
+          PR_NUMBER: ${{ github.event.pull_request.number }}
+          PR_AUTHOR: ${{ github.event.pull_request.user.login }}
+          PR_TITLE: ${{ github.event.pull_request.title }}
+          PR_BRANCH: ${{ github.head_ref || github.event.pull_request.head.ref }}
+          BASE_REF: ${{ github.base_ref || 'main' }}
+        run: python3 .github/scripts/auto_merge_pr.py

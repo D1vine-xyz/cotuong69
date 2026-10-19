@@ -275,6 +275,7 @@ def post_github_comment(repo, pr_number, gh_token, comment_body):
 def main():
     pr_number = os.environ.get("PR_NUMBER", "")
     pr_title = os.environ.get("PR_TITLE", "Untitled PR")
+    pr_body = os.environ.get("PR_BODY", "")
     pr_url = os.environ.get("PR_URL", "")
     pr_author = os.environ.get("PR_AUTHOR", "contributor")
     pr_branch = os.environ.get("PR_BRANCH", "")
@@ -349,7 +350,7 @@ def main():
     # ============================================================
     # 2. KIỂM TRA ĐÚNG DESCRIPTION JIRA & SCOPE GUARD (KHÔNG ĐỤNG TASK KHÁC)
     # ============================================================
-    issue_key = extract_jira_issue_key(f"{pr_title} {pr_branch}")
+    issue_key = extract_jira_issue_key(f"{pr_title} {pr_branch} {pr_body}")
     if not issue_key:
         print("ℹ️ Không tìm thấy Jira Issue Key trong PR Title/Branch. Bỏ qua bước kiểm tra Description.")
         return
