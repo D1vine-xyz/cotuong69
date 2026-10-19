@@ -170,9 +170,78 @@
           </div>
         </div>
         <p class="role-description" id="modalRoleNotice">Bạn đang được kết nối vào phòng.</p>
+
+        <!-- COT-599: Chia sẻ liên kết phòng & Mời bạn bè trực tuyến -->
+        <div class="room-share-section" id="roomShareSection">
+          <div class="section-divider">
+            <span>Chia Sẻ Phòng & Mời Bạn Bè</span>
+          </div>
+
+          <!-- Nút sao chép mã và link mời -->
+          <div class="share-copy-actions">
+            <button type="button" id="copyRoomCodeBtn" class="btn btn-secondary btn-sm" title="Sao chép mã phòng 6 số">
+              <span>📋 Sao chép mã</span>
+            </button>
+            <button type="button" id="copyRoomLinkBtn" class="btn btn-secondary btn-sm" title="Sao chép liên kết vào phòng">
+              <span>🔗 Sao chép link mời</span>
+            </button>
+            <button type="button" id="openFriendInviteModalBtn" class="btn btn-gold btn-sm" title="Mời bạn bè đang trực tuyến">
+              <span>👥 Mời bạn bè Online</span>
+            </button>
+          </div>
+
+          <!-- Nút chia sẻ nhanh qua Mạng xã hội (Zalo, Facebook, Messenger) -->
+          <div class="quick-share-socials">
+            <span class="share-label">Chia sẻ nhanh:</span>
+            <div class="social-buttons">
+              <a href="#" id="shareFbBtn" class="social-btn fb-btn" target="_blank" rel="noopener noreferrer" title="Chia sẻ lên Facebook">
+                <span>Facebook</span>
+              </a>
+              <a href="#" id="shareMessengerBtn" class="social-btn messenger-btn" target="_blank" rel="noopener noreferrer" title="Gửi qua Messenger">
+                <span>Messenger</span>
+              </a>
+              <a href="#" id="shareZaloBtn" class="social-btn zalo-btn" target="_blank" rel="noopener noreferrer" title="Gửi qua Zalo">
+                <span>Zalo</span>
+              </a>
+            </div>
+          </div>
+        </div>
+
       </div>
       <div class="modal-footer">
         <button id="enterRoomBtn" class="btn btn-primary btn-large">Vào Bàn Cờ Ngay</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- COT-599: Friend Invitation Modal -->
+  <div id="friendInviteModal" class="modal-overlay" style="display: none;" role="dialog" aria-modal="true" aria-labelledby="friendModalHeading">
+    <div class="modal-card modal-card-friends">
+      <div class="modal-header">
+        <div class="modal-title-with-icon">
+          <span class="header-icon">👥</span>
+          <h3 id="friendModalHeading">Mời Bạn Bè Vào Phòng Cờ</h3>
+        </div>
+        <button id="closeFriendInviteModalBtn" class="close-btn" aria-label="Đóng">&times;</button>
+      </div>
+      <div class="modal-body">
+        <div class="friends-filter-wrapper">
+          <div class="friends-stats-bar">
+            <span>Bạn bè Trực tuyến: <strong id="onlineFriendsCount" class="highlight-online">0</strong> / <span id="totalFriendsCount">0</span></span>
+            <span class="note-no-reserve">ℹ️ Vị trí đối thủ vẫn mở tự do cho người khác</span>
+          </div>
+          <div class="friends-search-box">
+            <input type="text" id="friendSearchInput" placeholder="Tìm kiếm bạn bè theo tên hoặc username..." class="form-input">
+          </div>
+        </div>
+
+        <!-- Friend List Container -->
+        <div id="friendsListContainer" class="friends-list-container">
+          <!-- Rendered by JS -->
+        </div>
+      </div>
+      <div class="modal-footer">
+        <button type="button" id="closeFriendModalFooterBtn" class="btn btn-secondary">Đóng</button>
       </div>
     </div>
   </div>

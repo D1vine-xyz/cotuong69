@@ -306,3 +306,131 @@ describe('Nghiệm thu Task COT-598: Code Modal Tạo phòng chơi (Công khai /
   });
 });
 
+describe('Nghiệm thu Task COT-599: Giao diện Danh sách bạn bè và nút Chia sẻ liên kết mời phòng', () => {
+
+  // AC 1: Danh sách bạn bè hiển thị đúng trạng thái Trực tuyến/Ngoại tuyến
+  test('AC 1.1: Trả về danh sách bạn bè đầy đủ thông tin kèm trạng thái Trực tuyến/Ngoại tuyến', async () => {
+    const api = new RoomApiService();
+    const friends = await api.getFriendsList();
+
+    assert.ok(Array.isArray(friends), 'Danh sách bạn bè phải là một mảng');
+    assert.ok(friends.length >= 5, 'Phải có ít nhất 5 bạn bè mẫu');
+
+    friends.forEach(friend => {
+      assert.ok(friend.id, 'Mỗi bạn bè phải có ID');
+      assert.ok(friend.displayName, 'Mỗi bạn bè phải có tên hiển thị');
+      assert.ok(typeof friend.isOnline === 'boolean', 'Trạng thái isOnline phải là kiểu boolean');
+      assert.ok(typeof friend.elo === 'number', 'Điểm Elo phải là số');
+    });
+  });
+
+  test('AC 1.2: Phân loại chính xác bạn bè Trực tuyến (Online) và Ngoại tuyến (Offline)', async () => {
+    const api = new RoomApiService();
+    const friends = await api.getFriendsList();
+
+    const onlineFriends = friends.filter(f => f.isOnline);
+    const offlineFriends = friends.filter(f => !f.isOnline);
+
+    assert.ok(onlineFriends.length > 0, 'Phải có bạn bè đang trực tuyến');
+    assert.ok(offlineFriends.length > 0, 'Phải có bạn bè đang ngoại tuyến');
+    assert.strictEqual(onlineFriends.length + offlineFriends.length, friends.length);
+  });
+
+  // AC 2: Gửi lời mời hiển thị đếm ngược 60 giây cho Chủ phòng
+  test('AC 2.1: Gửi lời mời thành công tới bạn bè Trực tuyến với thời hạn đếm ngược 60s', async () => {
+    const api = new RoomApiService();
+    const friends = await api.getFriendsList();
+    const onlineFriend = friends.find(f => f.isOnline);
+    assert.ok(onlineFriend, 'Cần có ít nhất 1 bạn bè online');
+
+    const res = await api.sendFriendInvitation(onlineFriend.id, '102938');
+
+    assert.strictEqual(res.success, true);
+    assert.ok(res.invitation, 'Phải trả về thông tin lời mời');
+    assert.strictEqual(res.invitation.friendId, onlineFriend.id);
+    assert.strictEqual(res.invitation.roomCode, '102938');
+    assert.strictEqual(res.invitation.status, 'PENDING');
+    assert.strictEqual(res.invitation.countdown, 60, 'Thời gian đếm ngược ban đầu phải là 60 giây');
+    assert.ok(res.invitation.expiresAt > Date.now(), 'Thời điểm hết hạn phải lớn hơn hiện tại');
+  });
+
+  test('AC 2.2: Từ chối gửi lời mời khi bạn bè đang Ngoại tuyến (FRIEND_OFFLINE)', async () => {
+    const api = new RoomApiService();
+    const friends = await api.getFriendsList();
+    const offlineFriend = friends.find(f => !f.isOnline);
+    assert.ok(offlineFriend, 'Cần có bạn bè offline');
+
+    await assert.rejects(
+      async () => { await api.sendFriendInvitation(offlineFriend.id, '102938'); },
+      { code: 'FRIEND_OFFLINE' }
+    );
+  });
+
+  test('AC 2.3: Chủ phòng có thể chủ động hủy lời mời đang chờ', async () => {
+    const api = new RoomApiService();
+    const friends = await api.getFriendsList();
+    const onlineFriend = friends.find(f => f.isOnline);
+
+    const inviteRes = await api.sendFriendInvitation(onlineFriend.id, '102938');
+    const invId = inviteRes.invitation.id;
+
+    assert.ok(api.getPendingInvitation(invId), 'Lời mời phải tồn tại trước khi hủy');
+
+    const cancelRes = await api.cancelFriendInvitation(invId);
+    assert.strictEqual(cancelRes.success, true);
+    assert.strictEqual(api.getPendingInvitation(invId), null, 'Lời mời phải bị xóa sau khi hủy');
+  });
+
+  // AC 3: Giao diện KHÔNG được khóa hay giữ trước vị trí Đối thủ
+  test('AC 3.1: Sau khi gửi lời mời cho bạn bè, ghế Đối thủ vẫn hoàn toàn trống (không giữ chỗ)', async () => {
+    const api = new RoomApiService();
+
+    // Tạo 1 phòng cờ mới
+    const created = await api.createRoom({ name: 'Bàn Đấu Mời Bạn' });
+    const roomCode = created.room.code;
+
+    // Gửi lời mời tới bạn bè online
+    const friends = await api.getFriendsList();
+    const onlineFriend = friends.find(f => f.isOnline);
+    await api.sendFriendInvitation(onlineFriend.id, roomCode);
+
+    // Kiểm tra thông tin phòng trong kho lưu trữ
+    const publicRooms = await api.getPublicRooms();
+    const room = publicRooms.find(r => r.code === roomCode);
+
+    assert.ok(room, 'Phòng phải tồn tại');
+    assert.strictEqual(room.opponentId, null, 'Vị trí đối thủ KHÔNG được gán trước cho bạn bè');
+    assert.strictEqual(room.opponentName, null, 'Tên đối thủ KHÔNG được giữ chỗ');
+    assert.strictEqual(room.playerCount, 1, 'Số kỳ thủ trong phòng vẫn là 1 người');
+
+    // Người chơi bất kỳ khác vẫn có thể tham gia vào ghế Đối thủ (PLAYER)
+    const strangerJoin = await api.joinRoomByCode(roomCode);
+    assert.strictEqual(strangerJoin.success, true);
+    assert.strictEqual(strangerJoin.role, 'PLAYER', 'Người khác vẫn vào được ghế PLAYER mà không bị chặn');
+  });
+
+  // AC 4: Sao chép link và mã phòng hoạt động tốt
+  test('AC 4.1: Sinh mã phòng 6 số và URL mời phòng chuẩn cấu trúc', () => {
+    const api = new RoomApiService();
+    const share = api.generateShareLinks('102938');
+
+    assert.strictEqual(share.code, '102938');
+    assert.ok(share.url.includes('/room/102938'), 'Đường dẫn chia sẻ phải chứa /room/102938');
+  });
+
+  test('AC 4.2: Tích hợp đầy đủ các liên kết chia sẻ nhanh cho Facebook, Messenger và Zalo', () => {
+    const api = new RoomApiService();
+    const share = api.generateShareLinks('654321');
+
+    assert.ok(share.facebookUrl.includes('facebook.com/sharer/sharer.php'), 'Có URL chia sẻ Facebook');
+    assert.ok(share.facebookUrl.includes('654321'), 'URL Facebook chứa mã phòng');
+
+    assert.ok(share.messengerUrl.includes('fb-messenger://share'), 'Có URL chia sẻ Messenger');
+    assert.ok(share.messengerUrl.includes('654321'), 'URL Messenger chứa mã phòng');
+
+    assert.ok(share.zaloUrl.includes('zalo.me/share'), 'Có URL chia sẻ Zalo');
+    assert.ok(share.zaloUrl.includes('654321'), 'URL Zalo chứa mã phòng');
+  });
+});
+
+

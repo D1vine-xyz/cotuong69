@@ -68,6 +68,27 @@ document.addEventListener('DOMContentLoaded', () => {
   // Lock flag chống duplicate submission khi tạo phòng (AC 3)
   let isCreatingRoom = false;
 
+  // COT-599: Quản lý chia sẻ phòng & Mời bạn bè
+  let currentActiveRoomCode = '';
+  let friendsList = [];
+  let friendSearchKeyword = '';
+  const activeInvitationTimers = new Map(); // friendId -> { timerId, remainingSec, invitationId }
+
+  // COT-599: Share & Friend Invite DOM Elements
+  const copyRoomCodeBtn = document.getElementById('copyRoomCodeBtn');
+  const copyRoomLinkBtn = document.getElementById('copyRoomLinkBtn');
+  const shareFbBtn = document.getElementById('shareFbBtn');
+  const shareMessengerBtn = document.getElementById('shareMessengerBtn');
+  const shareZaloBtn = document.getElementById('shareZaloBtn');
+  const openFriendInviteModalBtn = document.getElementById('openFriendInviteModalBtn');
+  const friendInviteModal = document.getElementById('friendInviteModal');
+  const closeFriendInviteModalBtn = document.getElementById('closeFriendInviteModalBtn');
+  const closeFriendModalFooterBtn = document.getElementById('closeFriendModalFooterBtn');
+  const onlineFriendsCountEl = document.getElementById('onlineFriendsCount');
+  const totalFriendsCountEl = document.getElementById('totalFriendsCount');
+  const friendSearchInput = document.getElementById('friendSearchInput');
+  const friendsListContainer = document.getElementById('friendsListContainer');
+
   // Toast Container
   const toastContainer = document.getElementById('toastContainer');
 
@@ -182,6 +203,58 @@ document.addEventListener('DOMContentLoaded', () => {
         closeModal();
       }, 1000);
     });
+
+    // COT-599: Nút sao chép mã và link mời phòng
+    if (copyRoomCodeBtn) {
+      copyRoomCodeBtn.addEventListener('click', handleCopyRoomCode);
+    }
+    if (copyRoomLinkBtn) {
+      copyRoomLinkBtn.addEventListener('click', handleCopyRoomLink);
+    }
+
+    // COT-599: Mở và đóng Modal Mời bạn bè
+    if (openFriendInviteModalBtn) {
+      openFriendInviteModalBtn.addEventListener('click', openFriendInviteModal);
+    }
+    if (closeFriendInviteModalBtn) {
+      closeFriendInviteModalBtn.addEventListener('click', closeFriendInviteModal);
+    }
+    if (closeFriendModalFooterBtn) {
+      closeFriendModalFooterBtn.addEventListener('click', closeFriendInviteModal);
+    }
+    if (friendInviteModal) {
+      friendInviteModal.addEventListener('click', (e) => {
+        if (e.target === friendInviteModal) closeFriendInviteModal();
+      });
+    }
+
+    // COT-599: Tìm kiếm bạn bè trong danh sách
+    if (friendSearchInput) {
+      friendSearchInput.addEventListener('input', (e) => {
+        friendSearchKeyword = e.target.value.trim().toLowerCase();
+        renderFriendsList();
+      });
+    }
+
+    // COT-599: Event delegation cho nút Mời đấu và Hủy mời trong danh sách bạn bè
+    if (friendsListContainer) {
+      friendsListContainer.addEventListener('click', async (e) => {
+        const inviteBtn = e.target.closest('.btn-invite-friend');
+        if (inviteBtn && !inviteBtn.disabled) {
+          const friendId = inviteBtn.getAttribute('data-friend-id');
+          await handleInviteFriend(friendId);
+          return;
+        }
+
+        const cancelBtn = e.target.closest('.btn-cancel-invite');
+        if (cancelBtn) {
+          const friendId = cancelBtn.getAttribute('data-friend-id');
+          const invId = cancelBtn.getAttribute('data-inv-id');
+          await handleCancelInvitation(friendId, invId);
+          return;
+        }
+      });
+    }
   }
 
   /**
@@ -443,11 +516,244 @@ document.addEventListener('DOMContentLoaded', () => {
 
     if (modalRoleNotice) modalRoleNotice.textContent = roleMessage;
 
+    // COT-599: Cập nhật mã phòng đang mở và đường dẫn chia sẻ mạng xã hội
+    currentActiveRoomCode = room.code;
+    const shareLinks = apiService.generateShareLinks(room.code);
+    if (shareFbBtn) shareFbBtn.href = shareLinks.facebookUrl;
+    if (shareMessengerBtn) shareMessengerBtn.href = shareLinks.messengerUrl;
+    if (shareZaloBtn) shareZaloBtn.href = shareLinks.zaloUrl;
+
     roomModal.style.display = 'flex';
   }
 
   function closeModal() {
     roomModal.style.display = 'none';
+  }
+
+  /**
+   * ===================================================================
+   * COT-599: Giao diện Danh sách bạn bè và nút Chia sẻ liên kết mời phòng
+   * ===================================================================
+   */
+
+  /**
+   * Sao chép mã phòng 6 chữ số
+   * Tiêu chí chấp nhận 4: Nút "Sao chép mã phòng" kèm toast thông báo thành công.
+   */
+  async function handleCopyRoomCode() {
+    if (!currentActiveRoomCode) return;
+    try {
+      if (navigator.clipboard && navigator.clipboard.writeText) {
+        await navigator.clipboard.writeText(currentActiveRoomCode);
+      }
+      showToast(`Đã sao chép mã phòng [#${currentActiveRoomCode}] vào bộ nhớ tạm!`, 'success');
+    } catch {
+      showToast(`Mã phòng của bạn: ${currentActiveRoomCode}`, 'info');
+    }
+  }
+
+  /**
+   * Sao chép liên kết mời phòng
+   * Tiêu chí chấp nhận 4: Nút "Sao chép link mời" kèm toast thông báo thành công.
+   */
+  async function handleCopyRoomLink() {
+    if (!currentActiveRoomCode) return;
+    const shareInfo = apiService.generateShareLinks(currentActiveRoomCode);
+    try {
+      if (navigator.clipboard && navigator.clipboard.writeText) {
+        await navigator.clipboard.writeText(shareInfo.url);
+      }
+      showToast(`Đã sao chép link mời [${shareInfo.url}] vào bộ nhớ tạm!`, 'success');
+    } catch {
+      showToast(`Link mời: ${shareInfo.url}`, 'info');
+    }
+  }
+
+  /**
+   * Mở Modal Danh sách bạn bè để mời vào phòng
+   * Tiêu chí chấp nhận 1: Mở danh sách bạn bè kèm trạng thái Trực tuyến/Ngoại tuyến.
+   */
+  async function openFriendInviteModal() {
+    try {
+      friendsList = await apiService.getFriendsList();
+      friendSearchKeyword = '';
+      if (friendSearchInput) friendSearchInput.value = '';
+      renderFriendsList();
+      if (friendInviteModal) friendInviteModal.style.display = 'flex';
+    } catch (error) {
+      showToast(error.message, 'error');
+    }
+  }
+
+  function closeFriendInviteModal() {
+    if (friendInviteModal) {
+      friendInviteModal.style.display = 'none';
+    }
+  }
+
+  /**
+   * Render danh sách bạn bè (Trực tuyến / Ngoại tuyến)
+   * Tiêu chí chấp nhận 1: Hiển thị đúng trạng thái Trực tuyến/Ngoại tuyến.
+   * Tiêu chí chấp nhận 2: Gửi lời mời hiển thị đếm ngược 60 giây cho Chủ phòng.
+   * Tiêu chí chấp nhận 3: Giao diện KHÔNG được khóa hay giữ trước vị trí Đối thủ.
+   */
+  function renderFriendsList() {
+    if (!friendsListContainer) return;
+
+    let filtered = [...friendsList];
+    if (friendSearchKeyword) {
+      filtered = filtered.filter(f => 
+        (f.displayName && f.displayName.toLowerCase().includes(friendSearchKeyword)) ||
+        (f.username && f.username.toLowerCase().includes(friendSearchKeyword))
+      );
+    }
+
+    // Sắp xếp: Trực tuyến lên trước, sau đó đến Ngoại tuyến
+    filtered.sort((a, b) => (b.isOnline ? 1 : 0) - (a.isOnline ? 1 : 0));
+
+    // Thống kê số lượng
+    const onlineCount = friendsList.filter(f => f.isOnline).length;
+    if (onlineFriendsCountEl) onlineFriendsCountEl.textContent = onlineCount;
+    if (totalFriendsCountEl) totalFriendsCountEl.textContent = friendsList.length;
+
+    if (filtered.length === 0) {
+      friendsListContainer.innerHTML = `
+        <div style="text-align: center; padding: 24px; color: var(--text-muted); font-size: 13px;">
+          Không tìm thấy bạn bè nào phù hợp.
+        </div>
+      `;
+      return;
+    }
+
+    friendsListContainer.innerHTML = filtered.map(friend => {
+      const isOnline = Boolean(friend.isOnline);
+      const initial = (friend.displayName || friend.username || 'K').charAt(0).toUpperCase();
+      const inviteInfo = activeInvitationTimers.get(friend.id);
+
+      let actionHtml = '';
+      if (inviteInfo) {
+        // Đang có lời mời chờ phản hồi (đếm ngược 60 giây)
+        actionHtml = `
+          <div class="waiting-invite-box">
+            <span class="waiting-countdown">⏳ <strong id="cd-${friend.id}">${inviteInfo.remainingSec}s</strong></span>
+            <button class="btn-cancel-invite" data-friend-id="${escapeHtml(friend.id)}" data-inv-id="${escapeHtml(inviteInfo.invitationId)}">
+              Hủy mời
+            </button>
+          </div>
+        `;
+      } else if (isOnline) {
+        actionHtml = `
+          <button class="btn btn-gold btn-invite-friend" data-friend-id="${escapeHtml(friend.id)}">
+            Mời đấu
+          </button>
+        `;
+      } else {
+        actionHtml = `
+          <button class="btn btn-secondary btn-invite-friend" disabled title="Kỳ thủ hiện đang ngoại tuyến">
+            Ngoại tuyến
+          </button>
+        `;
+      }
+
+      return `
+        <div class="friend-item" data-id="${escapeHtml(friend.id)}">
+          <div class="friend-profile-wrap">
+            <div class="friend-avatar-wrap">
+              <div class="friend-avatar">${escapeHtml(initial)}</div>
+              <span class="friend-status-dot ${isOnline ? 'online' : 'offline'}"></span>
+            </div>
+            <div class="friend-details">
+              <span class="friend-name">${escapeHtml(friend.displayName || friend.username)}</span>
+              <div class="friend-meta">
+                <span>Elo: <strong>${friend.elo || 1200}</strong></span>
+                <span>•</span>
+                <span class="friend-status-text ${isOnline ? 'online' : 'offline'}">
+                  ${isOnline ? 'Trực tuyến' : 'Ngoại tuyến'}
+                </span>
+              </div>
+            </div>
+          </div>
+          <div class="friend-action-box">
+            ${actionHtml}
+          </div>
+        </div>
+      `;
+    }).join('');
+  }
+
+  /**
+   * Xử lý gửi lời mời tới bạn bè đang Trực tuyến
+   * Tiêu chí chấp nhận 2: Gửi lời mời hiển thị đếm ngược 60 giây cho Chủ phòng.
+   * Tiêu chí chấp nhận 3: Giao diện KHÔNG được khóa hay giữ trước vị trí Đối thủ.
+   */
+  async function handleInviteFriend(friendId) {
+    if (!currentActiveRoomCode) {
+      showToast('Không xác định được phòng cờ để mời.', 'error');
+      return;
+    }
+
+    try {
+      const res = await apiService.sendFriendInvitation(friendId, currentActiveRoomCode);
+
+      if (res.success) {
+        showToast(res.message + ' (Đang chờ phản hồi 60s)', 'success');
+
+        let remainingSec = 60;
+        const invId = res.invitation.id;
+
+        const timerId = setInterval(() => {
+          remainingSec--;
+          const item = activeInvitationTimers.get(friendId);
+          if (item) {
+            item.remainingSec = remainingSec;
+          }
+
+          const countdownEl = document.getElementById(`cd-${friendId}`);
+          if (countdownEl) {
+            countdownEl.textContent = `${remainingSec}s`;
+          }
+
+          if (remainingSec <= 0) {
+            clearInterval(timerId);
+            activeInvitationTimers.delete(friendId);
+            renderFriendsList();
+            showToast(`Lời mời gửi tới "${res.invitation.friendName}" đã hết hạn phản hồi (60s).`, 'info');
+          }
+        }, 1000);
+
+        activeInvitationTimers.set(friendId, {
+          timerId,
+          remainingSec,
+          invitationId: invId
+        });
+
+        renderFriendsList();
+      }
+    } catch (error) {
+      showToast(error.message, 'error');
+    }
+  }
+
+  /**
+   * Xử lý hủy lời mời khi đang chờ phản hồi
+   */
+  async function handleCancelInvitation(friendId, invitationId) {
+    const timerInfo = activeInvitationTimers.get(friendId);
+    if (timerInfo && timerInfo.timerId) {
+      clearInterval(timerInfo.timerId);
+    }
+    activeInvitationTimers.delete(friendId);
+
+    try {
+      if (invitationId) {
+        await apiService.cancelFriendInvitation(invitationId);
+      }
+      showToast('Đã hủy lời mời thi đấu thành công.', 'info');
+    } catch (error) {
+      showToast(error.message, 'error');
+    } finally {
+      renderFriendsList();
+    }
   }
 
   /**

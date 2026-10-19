@@ -115,11 +115,22 @@ const INITIAL_PUBLIC_ROOMS = [
   }
 ];
 
+// Dữ liệu mock ban đầu mô phỏng danh sách Bạn bè của người dùng (COT-599)
+const INITIAL_FRIENDS = [
+  { id: 'f-1', username: 'tranductai', displayName: 'Trần Đức Tài', elo: 1320, isOnline: true },
+  { id: 'f-2', username: 'truongviethiep', displayName: 'Trương Viết Hiệp', elo: 1400, isOnline: true },
+  { id: 'f-3', username: 'nguyennhattruong', displayName: 'Nguyễn Nhật Trường', elo: 1210, isOnline: false },
+  { id: 'f-4', username: 'nguyenquochung', displayName: 'Nguyễn Quốc Hưng', elo: 1180, isOnline: true },
+  { id: 'f-5', username: 'lethanhquan', displayName: 'Lê Thành Quân', elo: 1290, isOnline: false }
+];
+
 class RoomApiService {
   constructor() {
     this.baseUrl = '/api/rooms';
     // Sử dụng in-memory mock store
     this.roomsStore = JSON.parse(JSON.stringify(INITIAL_PUBLIC_ROOMS));
+    this.friendsStore = JSON.parse(JSON.stringify(INITIAL_FRIENDS));
+    this.pendingInvitations = new Map(); // invitationId -> invData
     this.realtimeListeners = [];
     // Thông tin người dùng hiện tại (mặc định đã đăng nhập theo session)
     this.currentUser = {
@@ -324,12 +335,165 @@ class RoomApiService {
       this.realtimeListeners.forEach(listener => listener(eventPayload));
     }
   }
+
+  /**
+   * ===================================================================
+   * COT-599: Giao diện Danh sách bạn bè và nút Chia sẻ liên kết mời phòng
+   * ===================================================================
+   */
+
+  /**
+   * Lấy danh sách bạn bè của người dùng (kèm trạng thái Trực tuyến/Ngoại tuyến)
+   * Tiêu chí chấp nhận 1: Danh sách bạn bè hiển thị đúng trạng thái Trực tuyến/Ngoại tuyến.
+   */
+  async getFriendsList() {
+    return JSON.parse(JSON.stringify(this.friendsStore));
+  }
+
+  /**
+   * Thiết lập trạng thái Online/Offline cho bạn bè (dùng cho test / realtime presence)
+   */
+  setFriendOnlineStatus(friendId, isOnline) {
+    const friend = this.friendsStore.find(f => f.id === friendId);
+    if (friend) {
+      friend.isOnline = Boolean(isOnline);
+    }
+  }
+
+  /**
+   * Gửi lời mời bạn bè vào phòng cờ trực tiếp
+   * Tiêu chí chấp nhận 1: Chỉ cho phép gửi lời mời tới bạn bè đang Trực tuyến.
+   * Tiêu chí chấp nhận 2: Gửi lời mời hiển thị đếm ngược 60 giây cho Chủ phòng.
+   * Tiêu chí chấp nhận 3: Giao diện KHÔNG được khóa hay giữ trước vị trí Đối thủ khi đang chờ phản hồi.
+   * @param {string} friendId - ID bạn bè nhận lời mời
+   * @param {string} roomCode - Mã phòng 6 ký tự
+   */
+  async sendFriendInvitation(friendId, roomCode) {
+    if (!friendId) {
+      throw new Error('Vui lòng chọn bạn bè để gửi lời mời.');
+    }
+
+    const friend = this.friendsStore.find(f => f.id === friendId);
+    if (!friend) {
+      throw new Error('Người bạn này không tồn tại trong danh sách bạn bè.');
+    }
+
+    // Phạm vi: Chỉ cho phép bấm Mời với bạn bè đang Trực tuyến
+    if (!friend.isOnline) {
+      const err = new Error(`Kỳ thủ "${friend.displayName}" hiện đang Ngoại tuyến, không thể nhận lời mời.`);
+      err.code = 'FRIEND_OFFLINE';
+      throw err;
+    }
+
+    if (!roomCode) {
+      throw new Error('Mã phòng không hợp lệ.');
+    }
+
+    const room = this.roomsStore.find(r => r.code === roomCode);
+    if (!room) {
+      throw new Error(`Không tìm thấy phòng cờ với mã [${roomCode}].`);
+    }
+
+    if (room.status === 'CLOSED') {
+      throw new Error(`Phòng [${roomCode}] đã đóng, không thể gửi lời mời.`);
+    }
+
+    const invitationId = `inv_${Date.now()}_${friendId}`;
+    const expiresAt = Date.now() + 60 * 1000; // TTL 60 giây
+
+    const invitation = {
+      id: invitationId,
+      friendId,
+      friendName: friend.displayName,
+      roomCode,
+      status: 'PENDING',
+      countdown: 60,
+      expiresAt,
+      createdAt: new Date().toISOString()
+    };
+
+    this.pendingInvitations.set(invitationId, invitation);
+
+    // Tiêu chí 3: KHÔNG giữ chỗ Đối thủ cho người được mời (room.opponentId vẫn giữ nguyên null)
+    // Người khác vẫn có thể vào hoặc ghế đấu vẫn ở trạng thái trống.
+
+    return {
+      success: true,
+      message: `Đã gửi lời mời tới "${friend.displayName}"!`,
+      invitation
+    };
+  }
+
+  /**
+   * Hủy lời mời trực tiếp khi đang chờ phản hồi
+   * Phạm vi: Có nút Hủy lời mời cho Chủ phòng khi lời mời còn đang chờ.
+   */
+  async cancelFriendInvitation(invitationId) {
+    if (!invitationId) {
+      throw new Error('Mã lời mời không hợp lệ.');
+    }
+
+    const exists = this.pendingInvitations.has(invitationId);
+    if (exists) {
+      this.pendingInvitations.delete(invitationId);
+    }
+
+    return {
+      success: true,
+      message: 'Đã hủy lời mời thành công.'
+    };
+  }
+
+  /**
+   * Lấy thông tin lời mời đang chờ (kiểm tra còn hiệu lực 60s không)
+   */
+  getPendingInvitation(invitationId) {
+    const inv = this.pendingInvitations.get(invitationId);
+    if (!inv) return null;
+
+    if (Date.now() > inv.expiresAt) {
+      this.pendingInvitations.delete(invitationId);
+      return null;
+    }
+
+    const remainingSec = Math.max(0, Math.ceil((inv.expiresAt - Date.now()) / 1000));
+    return {
+      ...inv,
+      countdown: remainingSec
+    };
+  }
+
+  /**
+   * Sinh liên kết và công cụ chia sẻ phòng chơi
+   * Tiêu chí chấp nhận 4: Sao chép link và mã phòng hoạt động tốt, mở sẵn app MXH.
+   * @param {string} roomCode - Mã phòng 6 chữ số
+   */
+  generateShareLinks(roomCode) {
+    const origin = (typeof window !== 'undefined' && window.location && window.location.origin) 
+      ? window.location.origin 
+      : 'https://cotuong69.vn';
+
+    const cleanCode = String(roomCode).replace(/^#/, '').trim();
+    const shareUrl = `${origin}/room/${cleanCode}`;
+
+    const encodedUrl = encodeURIComponent(shareUrl);
+    const encodedTitle = encodeURIComponent(`Giao lưu Cờ Tướng cùng tôi tại phòng cờ #${cleanCode} trên Kỳ Đạo Online!`);
+
+    return {
+      code: cleanCode,
+      url: shareUrl,
+      facebookUrl: `https://www.facebook.com/sharer/sharer.php?u=${encodedUrl}`,
+      messengerUrl: `fb-messenger://share?link=${encodedUrl}`,
+      zaloUrl: `https://zalo.me/share?url=${encodedUrl}&title=${encodedTitle}`
+    };
+  }
 }
 
 // Xuất service cho browser hoặc Node.js test
 if (typeof module !== 'undefined' && module.exports) {
-  module.exports = { RoomApiService, ROOM_STATUS, INITIAL_PUBLIC_ROOMS };
+  module.exports = { RoomApiService, ROOM_STATUS, INITIAL_PUBLIC_ROOMS, INITIAL_FRIENDS };
 } else {
   window.RoomApiService = RoomApiService;
   window.ROOM_STATUS = ROOM_STATUS;
+  window.INITIAL_FRIENDS = INITIAL_FRIENDS;
 }
