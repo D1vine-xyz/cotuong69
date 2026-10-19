@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState } from 'react';
 import XiangqiBoard from './presentation/components/board/XiangqiBoard';
+import ChatBox from './presentation/components/chat/ChatBox';
 import { useMatch } from './application/hooks/useMatch';
 import './styles.css';
 
@@ -543,9 +544,17 @@ function App() {
         <span>♟ &nbsp; KỲ THỦ ONLINE</span>
         <span>CHÚC CÁC KỲ THỦ CÓ MỘT VÁN CỜ HAY</span>
       </footer>
-      {error && !reconnectState.selfDisconnected && (
-        <div className="connection-banner" role="alert">Không thể cập nhật trận đấu: {error}</div>
-      )}
+      {/* COT-630: Khung chat text thời gian thực giữa hai người chơi trong phòng */}
+      <ChatBox
+        roomId={match.matchCode || matchId}
+        currentUser={{
+          id: color === 'red' ? 'player_red' : color === 'black' ? 'player_black' : 'spectator_user',
+          name: color === 'red' ? match.players.red.name : color === 'black' ? match.players.black.name : 'Khán Giả',
+          avatar: color === 'red' ? '帥' : color === 'black' ? '將' : '観',
+        }}
+        role={readOnly ? 'SPECTATOR' : color === 'red' ? 'HOST' : 'PLAYER'}
+        readOnly={readOnly}
+      />
     </main>
   );
 }
