@@ -137,7 +137,8 @@ class RoomApiService {
       id: 'user-sang-01',
       username: 'nguyen_tan_sang',
       displayName: 'Nguyễn Tấn Sang',
-      elo: 1250,
+      elo: 1000,
+      avatar: '桑',
       isLoggedIn: true
     };
   }
@@ -146,7 +147,11 @@ class RoomApiService {
    * Lấy thông tin người dùng đang đăng nhập
    */
   getCurrentUser() {
-    return this.currentUser && this.currentUser.isLoggedIn ? this.currentUser : null;
+    if (!this.currentUser || !this.currentUser.isLoggedIn) return null;
+    return {
+      ...this.currentUser,
+      elo: Number.isFinite(this.currentUser.elo) ? this.currentUser.elo : 1000
+    };
   }
 
   /**

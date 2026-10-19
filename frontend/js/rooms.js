@@ -349,6 +349,46 @@ document.addEventListener('DOMContentLoaded', () => {
     if (loginForm) {
       loginForm.addEventListener('submit', handleLoginSubmit);
     }
+
+    // COT-584: Điều hướng các khối tính năng Sảnh chờ
+    const navPlayOnlineCard = document.getElementById('navPlayOnlineCard');
+    const navPlayAiCard = document.getElementById('navPlayAiCard');
+    const navFriendsCard = document.getElementById('navFriendsCard');
+
+    if (navPlayOnlineCard) {
+      navPlayOnlineCard.addEventListener('click', () => {
+        document.querySelectorAll('.lobby-mode-card').forEach(c => c.classList.remove('is-active'));
+        navPlayOnlineCard.classList.add('is-active');
+        const roomsContainer = document.querySelector('.rooms-container');
+        if (roomsContainer) {
+          roomsContainer.scrollIntoView({ behavior: 'smooth' });
+        }
+      });
+    }
+
+    if (navPlayAiCard) {
+      navPlayAiCard.addEventListener('click', () => {
+        document.querySelectorAll('.lobby-mode-card').forEach(c => c.classList.remove('is-active'));
+        navPlayAiCard.classList.add('is-active');
+        // Kích hoạt mở modal Bắt đầu trận PvE
+        if (typeof window.openPveModal === 'function') {
+          window.openPveModal();
+        } else {
+          const openPveEvent = new CustomEvent('cotuong:open-pve');
+          window.dispatchEvent(openPveEvent);
+        }
+      });
+    }
+
+    if (navFriendsCard) {
+      navFriendsCard.addEventListener('click', () => {
+        document.querySelectorAll('.lobby-mode-card').forEach(c => c.classList.remove('is-active'));
+        navFriendsCard.classList.add('is-active');
+        if (typeof openFriendInviteModal === 'function') {
+          openFriendInviteModal();
+        }
+      });
+    }
   }
 
   /**
@@ -1057,8 +1097,10 @@ document.addEventListener('DOMContentLoaded', () => {
       if (openLoginModalBtn) openLoginModalBtn.style.display = 'none';
       const nameEl = document.getElementById('currentUserName');
       const eloEl = document.getElementById('currentUserElo');
-      if (nameEl) nameEl.textContent = user.displayName || user.username;
-      if (eloEl) eloEl.textContent = user.elo || 1200;
+      const avatarEl = document.getElementById('currentUserAvatar');
+      if (nameEl) nameEl.textContent = user.displayName || user.username || 'Kỳ Thủ';
+      if (eloEl) eloEl.textContent = Number.isFinite(user.elo) ? user.elo : 1000;
+      if (avatarEl) avatarEl.textContent = user.avatar || (user.displayName ? user.displayName.charAt(0).toUpperCase() : '桑');
     } else {
       if (userProfileBar) userProfileBar.style.display = 'none';
       if (openLoginModalBtn) openLoginModalBtn.style.display = 'inline-flex';
@@ -1145,7 +1187,8 @@ document.addEventListener('DOMContentLoaded', () => {
         id: 'user-sang-01',
         username: username,
         displayName: 'Nguyễn Tấn Sang',
-        elo: 1250,
+        elo: 1000,
+        avatar: '桑',
         isLoggedIn: true
       });
 
