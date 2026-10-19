@@ -8,12 +8,13 @@ Tài liệu này hướng dẫn các thành viên trong dự án **Cờ Tướng
 
 Hệ thống sử dụng **GitHub Actions** (`.github/workflows/jira-sync.yml`) kết hợp Jira REST API v3 để tự động đồng bộ trạng thái task theo vòng đời phát triển tính năng:
 
-| Thao tác Git của thành viên | Sự kiện GitHub | Trạng thái Jira tương ứng | Transition ID | Ý nghĩa |
+| Thao tác Git của thành viên | Sự kiện GitHub | Trạng thái Jira tương ứng | Transition ID | Ý nghĩa & Hành động Bot |
 | :--- | :--- | :--- | :---: | :--- |
 | **Tạo và đẩy nhánh mới** | `create (branch)` | **`READY FOR DEV`** | `61` | Đã nhận task, bắt đầu chuẩn bị code |
 | **Đẩy commit lên nhánh** | `push` (feature branch) | **`IN PROGRESS`** | `21` | Đang thực hiện lập trình |
-| **Mở Pull Request** | `pull_request` (opened) | **`READY FOR TEST`** | `71` | Đã code xong, sẵn sàng để review và test |
-| **Merge Pull Request** | `pull_request` (merged) | **`DONE`** | `31` | Đã nghiệm thu và gộp vào nhánh chính |
+| **Mở / Cập nhật Pull Request** | `pull_request` (opened, sync) | **`READY FOR TEST`** | `71` | CI chạy tests + AI Quality Gate kiểm tra phạm vi (scope) & Jira criteria |
+| **CI & AI Gate Pass** | Bot Auto-Merge | **`DONE`** | `31` | **Tự động gộp vào `main`** không cần merge thủ công khi đạt chuẩn |
+| **Revert Pull Request** | `pull_request` (revert) | **`IN PROGRESS`** | `21` | Lùi task về In Progress để sửa lại lỗi |
 
 ---
 
@@ -94,11 +95,16 @@ git push
 
 ---
 
-### Bước 4: Review và Merge Pull Request
-Sau khi Tech Lead hoặc đồng nghiệp review code và chạy test thành công:
-1. Nhấn nút **Merge pull request** trên GitHub.
-2. Xác nhận **Confirm merge**.
-> 🎯 **Kết quả:** Task `COT-606` trên Jira tự động nhảy sang **`DONE`**.
+### Bước 4: Tự Động Kiểm Thử, AI Quality Gate & Auto-Merge
+Ngay khi Pull Request được tạo hoặc có commit mới được đẩy lên, GitHub Actions Bot sẽ tự động thực thi chu trình:
+1. **Kiểm thử tự động (Unit Tests & Build)**: Chạy toàn bộ bài test Backend và kiểm tra build/tests Frontend.
+2. **AI Quality Gate & Scope Verification**:
+   - Đối chiếu thay đổi mã nguồn với Mô tả (Description) và Tiêu chí nghiệm thu (Acceptance Criteria) của Task trên Jira.
+   - Kiểm tra Scope Guard: Đảm bảo PR không sửa nhầm/chèn lấn vào module của các task khác.
+3. **Cơ Chế Auto-Merge Hoàn Toàn Tự Động**:
+   - ✅ **Nếu Tests Pass và Scope Đạt Chuẩn**: Bot sẽ **tự động gộp (auto-merge)** nhánh PR vào `main`. Ngay sau đó, workflow đồng bộ Jira sẽ tự động chuyển trạng thái task sang **`DONE`** mà chủ repo không cần phải thao tác thủ công.
+   - ⚠️ **Nếu có xung đột mã nguồn (Conflict)**: Bot gửi bình luận hướng dẫn bạn rebase/merge nhánh `main` mới nhất để giải quyết conflict.
+   - ❌ **Nếu Tests Thất Bại hoặc Sai Scope**: Bot chặn merge, gửi bình luận chẩn đoán nguyên nhân lỗi từ AI và tự động tạo Bug Issue trên Jira để yêu cầu sửa chữa.
 
 ---
 

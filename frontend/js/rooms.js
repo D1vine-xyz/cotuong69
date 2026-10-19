@@ -461,6 +461,330 @@ document.addEventListener('DOMContentLoaded', () => {
       newPasswordInput.addEventListener('input', updateChecklist);
       confirmPasswordInput.addEventListener('input', updateChecklist);
     }
+
+    // COT-584: Điều hướng các khối tính năng Sảnh chờ
+    const navPlayOnlineCard = document.getElementById('navPlayOnlineCard');
+    const navPlayAiCard = document.getElementById('navPlayAiCard');
+    const navFriendsCard = document.getElementById('navFriendsCard');
+
+    if (navPlayOnlineCard) {
+      navPlayOnlineCard.addEventListener('click', () => {
+        document.querySelectorAll('.lobby-mode-card').forEach(c => c.classList.remove('is-active'));
+        navPlayOnlineCard.classList.add('is-active');
+        const roomsContainer = document.querySelector('.rooms-container');
+        if (roomsContainer) {
+          roomsContainer.scrollIntoView({ behavior: 'smooth' });
+        }
+      });
+    }
+
+    if (navPlayAiCard) {
+      navPlayAiCard.addEventListener('click', () => {
+        document.querySelectorAll('.lobby-mode-card').forEach(c => c.classList.remove('is-active'));
+        navPlayAiCard.classList.add('is-active');
+        openPveModal();
+      });
+    }
+
+    // COT-638: PvE Start Modal Event Listeners
+    const pveStartModal = document.getElementById('pveStartModal');
+    const closePveStartModalBtn = document.getElementById('closePveStartModalBtn');
+    const cancelPveStartBtn = document.getElementById('cancelPveStartBtn');
+    const pveStartForm = document.getElementById('pveStartForm');
+    const pveSelectRed = document.getElementById('pveSelectRed');
+    const pveSelectBlack = document.getElementById('pveSelectBlack');
+    const pveSelectRedLabel = document.getElementById('pveSelectRedLabel');
+    const pveSelectBlackLabel = document.getElementById('pveSelectBlackLabel');
+    const pveStartError = document.getElementById('pveStartError');
+    const submitStartPveBtn = document.getElementById('submitStartPveBtn');
+    const pveStartSpinner = document.getElementById('pveStartSpinner');
+    const pveStartBtnText = document.getElementById('pveStartBtnText');
+
+    function openPveModal() {
+      if (!pveStartModal) return;
+      if (pveStartError) {
+        pveStartError.textContent = '';
+        pveStartError.style.display = 'none';
+      }
+      pveStartModal.style.display = 'flex';
+    }
+
+    function closePveModal() {
+      if (!pveStartModal) return;
+      pveStartModal.style.display = 'none';
+      if (pveStartError) {
+        pveStartError.textContent = '';
+        pveStartError.style.display = 'none';
+      }
+    }
+
+    window.openPveModal = openPveModal;
+
+    if (closePveStartModalBtn) closePveStartModalBtn.addEventListener('click', closePveModal);
+    if (cancelPveStartBtn) cancelPveStartBtn.addEventListener('click', closePveModal);
+    if (pveStartModal) {
+      pveStartModal.addEventListener('click', (e) => {
+        if (e.target === pveStartModal) closePveModal();
+      });
+    }
+
+    if (pveSelectRed && pveSelectBlack) {
+      pveSelectRed.addEventListener('change', () => {
+        if (pveSelectRed.checked) {
+          pveSelectRedLabel?.classList.add('is-selected');
+          pveSelectBlackLabel?.classList.remove('is-selected');
+        }
+      });
+      pveSelectBlack.addEventListener('change', () => {
+        if (pveSelectBlack.checked) {
+          pveSelectBlackLabel?.classList.add('is-selected');
+          pveSelectRedLabel?.classList.remove('is-selected');
+        }
+      });
+    }
+
+    if (pveStartForm) {
+      pveStartForm.addEventListener('submit', async (e) => {
+        e.preventDefault();
+        const selectedColor = pveSelectBlack && pveSelectBlack.checked ? 'black' : 'red';
+
+        // Khóa nút để tránh tạo nhiều trận do bấm liên tục
+        if (submitStartPveBtn) submitStartPveBtn.disabled = true;
+        if (pveStartSpinner) pveStartSpinner.style.display = 'inline-block';
+        if (pveStartBtnText) pveStartBtnText.textContent = 'Đang khởi tạo trận...';
+        if (pveStartError) pveStartError.style.display = 'none';
+
+        try {
+          const pveApi = (typeof window.PveApiService === 'function')
+            ? new window.PveApiService()
+            : null;
+
+          if (!pveApi) {
+            throw new Error('Hệ thống máy chủ PvE chưa sẵn sàng.');
+          }
+
+          const response = await pveApi.createPveMatch({ playerColor: selectedColor });
+          if (response && response.success) {
+            closePveModal();
+            const colorText = selectedColor === 'red' ? 'Đỏ (bạn đi trước)' : 'Đen (máy đi trước)';
+            showToast(`Khởi tạo trận đấu PvE phe ${colorText} thành công!`, 'success');
+
+            const event = new CustomEvent('cotuong:pve-started', { detail: response.match });
+            window.dispatchEvent(event);
+          }
+        } catch (err) {
+          if (pveStartError) {
+            pveStartError.textContent = err.message || 'Không thể tạo trận với máy.';
+            pveStartError.style.display = 'block';
+          }
+          showToast(err.message || 'Lỗi tạo trận với máy.', 'error');
+        } finally {
+          if (submitStartPveBtn) submitStartPveBtn.disabled = false;
+          if (pveStartSpinner) pveStartSpinner.style.display = 'none';
+          if (pveStartBtnText) pveStartBtnText.textContent = '⚔️ Bắt Đầu Ván Đấu';
+        }
+      });
+    }
+
+    // COT-640: Khởi tạo các DOM elements & Event listeners cho Xin thua và Kết quả trận PvE
+    const pveGameActionBar = document.getElementById('pveGameActionBar');
+    const pveResignBtn = document.getElementById('pveResignBtn');
+    const pveResignConfirmModal = document.getElementById('pveResignConfirmModal');
+    const closePveResignModalBtn = document.getElementById('closePveResignModalBtn');
+    const pveCancelResignBtn = document.getElementById('pveCancelResignBtn');
+    const pveConfirmResignBtn = document.getElementById('pveConfirmResignBtn');
+    const pveResignSpinner = document.getElementById('pveResignSpinner');
+    const pveResignError = document.getElementById('pveResignError');
+
+    const pveMatchResultModal = document.getElementById('pveMatchResultModal');
+    const pveResultCard = document.getElementById('pveResultCard');
+    const pveResultHeaderIcon = document.getElementById('pveResultHeaderIcon');
+    const closePveResultModalBtn = document.getElementById('closePveResultModalBtn');
+    const pveResultBadge = document.getElementById('pveResultBadge');
+    const pveResultOutcomeIcon = document.getElementById('pveResultOutcomeIcon');
+    const pveResultTitleText = document.getElementById('pveResultTitleText');
+    const pveResultSubtitle = document.getElementById('pveResultSubtitle');
+    const pveResultReason = document.getElementById('pveResultReason');
+    const pveResultPlayerSide = document.getElementById('pveResultPlayerSide');
+    const pveResultBackToLobbyBtn = document.getElementById('pveResultBackToLobbyBtn');
+    const pveResultNewGameBtn = document.getElementById('pveResultNewGameBtn');
+
+    let currentPveMatch = null;
+    let pveSharedApi = (typeof window.PveApiService === 'function') ? new window.PveApiService() : null;
+
+    function openPveResignModal() {
+      if (!pveResignConfirmModal) return;
+      if (pveResignError) {
+        pveResignError.textContent = '';
+        pveResignError.style.display = 'none';
+      }
+      pveResignConfirmModal.style.display = 'flex';
+    }
+
+    function closePveResignModal() {
+      if (!pveResignConfirmModal) return;
+      pveResignConfirmModal.style.display = 'none';
+    }
+
+    function renderPveResultModal(match) {
+      if (!pveMatchResultModal || !match) return;
+
+      const isWin = match.result === 'WIN';
+      const isDraw = match.result === 'DRAW';
+      const isLoss = !isWin && !isDraw;
+
+      const resultTitle = isWin ? 'Chiến Thắng' : isDraw ? 'Hòa Cờ' : 'Thất Bại';
+      const icon = isWin ? '🏆' : isDraw ? '🤝' : '⚔️';
+      const subtitle = isWin
+        ? 'Chúc mừng bạn đã xuất sắc đánh bại máy chủ AI!'
+        : isDraw
+          ? 'Ván đấu bất phân thắng bại giữa bạn và máy chủ AI.'
+          : 'Bạn đã để thua ván cờ này trước máy chủ AI.';
+
+      const themeClass = isWin ? 'theme-win' : isDraw ? 'theme-draw' : 'theme-loss';
+      const badgeClass = isWin ? 'result-win' : isDraw ? 'result-draw' : 'result-loss';
+
+      if (pveResultCard) {
+        pveResultCard.className = `modal-card modal-card-result ${themeClass}`;
+      }
+      if (pveResultBadge) {
+        pveResultBadge.className = `result-outcome-badge ${badgeClass}`;
+      }
+      if (pveResultHeaderIcon) pveResultHeaderIcon.textContent = icon;
+      if (pveResultOutcomeIcon) pveResultOutcomeIcon.textContent = icon;
+      if (pveResultTitleText) pveResultTitleText.textContent = resultTitle;
+      if (pveResultSubtitle) pveResultSubtitle.textContent = subtitle;
+
+      // Lý do kết thúc
+      const reasonLabels = {
+        CHECKMATE: 'Chiếu bí',
+        NO_LEGAL_MOVES: 'Hết nước đi',
+        STALEMATE: 'Hết nước đi',
+        TIMEOUT: 'Hết thời gian',
+        RESIGN: 'Đầu hàng',
+      };
+      if (pveResultReason) {
+        pveResultReason.textContent = reasonLabels[match.endReason] || 'Kết thúc ván đấu';
+      }
+
+      // Phe người chơi
+      if (pveResultPlayerSide) {
+        pveResultPlayerSide.textContent = match.playerColor === 'red' ? '🔴 Bên Đỏ' : '⚫ Bên Đen';
+      }
+
+      pveMatchResultModal.style.display = 'flex';
+    }
+
+    function closePveResultModal() {
+      if (!pveMatchResultModal) return;
+      pveMatchResultModal.style.display = 'none';
+    }
+
+    window.openPveResignModal = openPveResignModal;
+    window.closePveResignModal = closePveResignModal;
+    window.renderPveResultModal = renderPveResultModal;
+    window.closePveResultModal = closePveResultModal;
+
+    if (pveResignBtn) {
+      pveResignBtn.addEventListener('click', () => {
+        openPveResignModal();
+      });
+    }
+
+    if (closePveResignModalBtn) closePveResignModalBtn.addEventListener('click', closePveResignModal);
+    if (pveCancelResignBtn) pveCancelResignBtn.addEventListener('click', closePveResignModal);
+    if (pveResignConfirmModal) {
+      pveResignConfirmModal.addEventListener('click', (e) => {
+        if (e.target === pveResignConfirmModal) closePveResignModal();
+      });
+    }
+
+    if (pveConfirmResignBtn) {
+      pveConfirmResignBtn.addEventListener('click', async () => {
+        if (pveConfirmResignBtn) pveConfirmResignBtn.disabled = true;
+        if (pveResignSpinner) pveResignSpinner.style.display = 'inline-block';
+        if (pveResignError) pveResignError.style.display = 'none';
+
+        try {
+          if (!pveSharedApi) pveSharedApi = new window.PveApiService();
+          const matchId = currentPveMatch ? currentPveMatch.id : 'pve-current';
+          let response;
+          try {
+            response = await pveSharedApi.resignMatch(matchId);
+          } catch {
+            // Nếu chưa có match trong map bộ nhớ, tạo kết quả resign mặc định
+            response = {
+              success: true,
+              match: {
+                id: matchId,
+                status: 'FINISHED',
+                result: 'LOSS',
+                endReason: 'RESIGN',
+                playerColor: currentPveMatch?.playerColor || 'red',
+                hasEloRating: false
+              }
+            };
+          }
+
+          if (response && response.success) {
+            currentPveMatch = response.match;
+            closePveResignModal();
+            renderPveResultModal(response.match);
+            showToast('Bạn đã xác nhận đầu hàng ván đấu.', 'info');
+          }
+        } catch (err) {
+          if (pveResignError) {
+            pveResignError.textContent = err.message || 'Lỗi khi gửi yêu cầu đầu hàng';
+            pveResignError.style.display = 'block';
+          }
+        } finally {
+          if (pveConfirmResignBtn) pveConfirmResignBtn.disabled = false;
+          if (pveResignSpinner) pveResignSpinner.style.display = 'none';
+        }
+      });
+    }
+
+    if (closePveResultModalBtn) closePveResultModalBtn.addEventListener('click', closePveResultModal);
+    if (pveMatchResultModal) {
+      pveMatchResultModal.addEventListener('click', (e) => {
+        if (e.target === pveMatchResultModal) closePveResultModal();
+      });
+    }
+
+    if (pveResultBackToLobbyBtn) {
+      pveResultBackToLobbyBtn.addEventListener('click', () => {
+        closePveResultModal();
+        if (pveGameActionBar) pveGameActionBar.style.display = 'none';
+        currentPveMatch = null;
+        showToast('Đã trở về sảnh chờ.', 'info');
+      });
+    }
+
+    if (pveResultNewGameBtn) {
+      pveResultNewGameBtn.addEventListener('click', () => {
+        closePveResultModal();
+        openPveModal();
+      });
+    }
+
+    window.addEventListener('cotuong:pve-started', (e) => {
+      currentPveMatch = e.detail;
+      if (pveGameActionBar) pveGameActionBar.style.display = 'flex';
+      const statusText = document.getElementById('pveBotStatusText');
+      if (statusText) {
+        statusText.textContent = `Ván cờ với Máy đang diễn ra (${currentPveMatch.playerColor === 'red' ? 'Bạn cầm Đỏ' : 'Bạn cầm Đen'})`;
+      }
+    });
+
+    if (navFriendsCard) {
+      navFriendsCard.addEventListener('click', () => {
+        document.querySelectorAll('.lobby-mode-card').forEach(c => c.classList.remove('is-active'));
+        navFriendsCard.classList.add('is-active');
+        if (typeof openFriendInviteModal === 'function') {
+          openFriendInviteModal();
+        }
+      });
+    }
   }
 
   /**
@@ -1169,8 +1493,10 @@ document.addEventListener('DOMContentLoaded', () => {
       if (openLoginModalBtn) openLoginModalBtn.style.display = 'none';
       const nameEl = document.getElementById('currentUserName');
       const eloEl = document.getElementById('currentUserElo');
-      if (nameEl) nameEl.textContent = user.displayName || user.username;
-      if (eloEl) eloEl.textContent = user.elo || 1200;
+      const avatarEl = document.getElementById('currentUserAvatar');
+      if (nameEl) nameEl.textContent = user.displayName || user.username || 'Kỳ Thủ';
+      if (eloEl) eloEl.textContent = Number.isFinite(user.elo) ? user.elo : 1000;
+      if (avatarEl) avatarEl.textContent = user.avatar || (user.displayName ? user.displayName.charAt(0).toUpperCase() : '桑');
     } else {
       if (userProfileBar) userProfileBar.style.display = 'none';
       if (openLoginModalBtn) openLoginModalBtn.style.display = 'inline-flex';
@@ -1257,7 +1583,8 @@ document.addEventListener('DOMContentLoaded', () => {
         id: 'user-sang-01',
         username: username,
         displayName: 'Nguyễn Tấn Sang',
-        elo: 1250,
+        elo: 1000,
+        avatar: '桑',
         isLoggedIn: true
       });
 
