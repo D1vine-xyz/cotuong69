@@ -7,6 +7,7 @@ const { createAuthHandler } = require('./presentation/http/routes/auth.routes');
 const { createUserHandler } = require('./presentation/http/routes/user.routes');
 const { createRoomHandler } = require('./presentation/http/routes/room.routes');
 const { createFriendsHandler } = require('./presentation/http/routes/friends.routes');
+const { roomHub: defaultRoomHub } = require('./presentation/websocket/roomHub');
 const fs = require('node:fs');
 const path = require('node:path');
 
@@ -15,6 +16,7 @@ function createServer(options = {}) {
   const now = options.now || (() => Date.now());
   const clients = new Map();
   const webSockets = new WebSocketServer({ noServer: true });
+  const roomHub = options.roomHub || defaultRoomHub;
   const getCurrentMatch = () => {
     if (!match) match = createCot615Match(now());
     return match;
@@ -117,6 +119,11 @@ function createServer(options = {}) {
       pathname = new URL(request.url, 'http://localhost').pathname;
     } catch {
       socket.destroy();
+      return;
+    }
+
+    if (pathname === '/ws/room' || pathname.startsWith('/ws/room/')) {
+      roomHub.handleUpgrade(request, socket, head);
       return;
     }
 
