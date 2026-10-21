@@ -365,6 +365,24 @@ class RoomHub {
       try {
         const demoteResult = room.demoteOpponent(meta.userId);
 
+        // Hủy cuộc gọi Video Call nếu đối thủ đang trong cuộc gọi (COT-626)
+        if (room.videoCall) {
+          const callId = room.videoCall.callId;
+          const callerId = room.videoCall.callerId;
+          const calleeId = room.videoCall.calleeId;
+          room.endVideoCall(meta.userId, 'PEER_DEMOTED');
+          const endMsg = {
+            type: 'CallEnded',
+            callId,
+            endedBy: meta.userId,
+            reason: 'PEER_DEMOTED',
+            message: 'Cuộc gọi kết thúc do đối thủ bị chuyển xuống vai trò Khán giả.',
+            roomCode: room.code,
+          };
+          this.sendToUserInRoom(room.code, callerId, endMsg);
+          this.sendToUserInRoom(room.code, calleeId, endMsg);
+        }
+
         // Cập nhật lại role trong socket meta của đối thủ bị hạ quyền
         const demotedSockets = this.userSockets.get(Number(demoteResult.demotedUser.id));
         if (demotedSockets) {
@@ -393,6 +411,25 @@ class RoomHub {
     if (type === 'kick') {
       try {
         const targetUserId = Number(payload.targetUserId);
+
+        // Hủy cuộc gọi Video Call nếu người bị kick đang trong cuộc gọi (COT-626)
+        if (room.videoCall && (Number(room.videoCall.callerId) === targetUserId || Number(room.videoCall.calleeId) === targetUserId)) {
+          const callId = room.videoCall.callId;
+          const callerId = room.videoCall.callerId;
+          const calleeId = room.videoCall.calleeId;
+          room.endVideoCall(meta.userId, 'PEER_KICKED');
+          const endMsg = {
+            type: 'CallEnded',
+            callId,
+            endedBy: meta.userId,
+            reason: 'PEER_KICKED',
+            message: 'Cuộc gọi kết thúc do thành viên bị loại khỏi phòng.',
+            roomCode: room.code,
+          };
+          this.sendToUserInRoom(room.code, callerId, endMsg);
+          this.sendToUserInRoom(room.code, calleeId, endMsg);
+        }
+
         const kickResult = room.kickParticipant(meta.userId, targetUserId);
 
         this.broadcastToRoom(room.code, {
@@ -640,6 +677,15 @@ class RoomHub {
         };
         this.sendToUserInRoom(room.code, endResult.callerId, endedMsg);
         this.sendToUserInRoom(room.code, endResult.calleeId, endedMsg);
+      } else {
+        // Cleanup lặp an toàn không gây lỗi hệ thống
+        this.send(socket, {
+          type: 'CallEnded',
+          callId: payload.callId || null,
+          endedBy: meta.userId,
+          reason: 'ALREADY_ENDED',
+          roomCode: room.code,
+        });
       }
       return;
     }
