@@ -9,7 +9,7 @@ class RoomManager {
   generateCode() {
     let code;
     do {
-      code = crypto.randomBytes(3).toString('hex').toUpperCase(); // 6 chars: e.g. '3FA9B1'
+      code = crypto.randomInt(100000, 1000000).toString(); // Đảm bảo đúng 6 chữ số ngẫu nhiên [100000-999999]
     } while (this.rooms.has(code));
     return code;
   }
@@ -28,7 +28,7 @@ class RoomManager {
       name: name && name.trim() ? name.trim() : `Phòng cờ của ${hostUser.displayName || hostUser.username}`,
       hostId: hostUser.id,
       hostUser,
-      isPrivate,
+      isPrivate: Boolean(isPrivate),
       maxSpectators,
     });
 
@@ -38,7 +38,10 @@ class RoomManager {
 
   findByCode(code) {
     if (!code) return null;
-    return this.rooms.get(code.toUpperCase().trim()) || null;
+    const cleanCode = code.toString().toUpperCase().trim();
+    const room = this.rooms.get(cleanCode);
+    if (!room || room.status === 'CLOSED') return null;
+    return room;
   }
 
   joinRoom(code, user) {

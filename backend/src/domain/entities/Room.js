@@ -6,15 +6,15 @@ class Room {
     hostUser,
     isPrivate = false,
     maxSpectators = 10,
-    status = 'WAITING',
+    status = 'WAITING_OPPONENT',
     createdAt = new Date(),
   }) {
-    this.code = code.toUpperCase();
+    this.code = code.toString().toUpperCase();
     this.name = name || `Phòng cờ #${this.code}`;
     this.hostId = Number(hostId);
     this.isPrivate = Boolean(isPrivate);
     this.maxSpectators = Number(maxSpectators);
-    this.status = status; // WAITING, PLAYING, FINISHED, CLOSED
+    this.status = status; // WAITING_OPPONENT, FULL_PLAYERS, PLAYING, FINISHED, CLOSED
     this.createdAt = createdAt;
 
     // Người chơi: Red (Host mặc định là Red) và Black
