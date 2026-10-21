@@ -8,6 +8,7 @@ class RoomHub {
   constructor({
     roomManager = defaultRoomManager,
     tokenService = { verifyAccessToken },
+    userRepository = null,
     heartbeatIntervalMs = 5000,
     heartbeatTimeoutMs = 10000,
     reconnectCountdownSeconds = 60,
@@ -15,6 +16,15 @@ class RoomHub {
   } = {}) {
     this.roomManager = roomManager;
     this.tokenService = tokenService;
+    this.userRepository = userRepository;
+    if (!this.userRepository) {
+      try {
+        const PgUserRepository = require('../../infrastructure/database/repositories/PgUserRepository');
+        this.userRepository = new PgUserRepository();
+      } catch {
+        this.userRepository = null;
+      }
+    }
     this.heartbeatIntervalMs = Number(heartbeatIntervalMs);
     this.heartbeatTimeoutMs = Number(heartbeatTimeoutMs);
     this.reconnectCountdownSeconds = Number(reconnectCountdownSeconds);
@@ -608,7 +618,157 @@ class RoomHub {
     }
   }
 
-  handleDisconnectTimeout(room, userId, side) {
+  async handleDisconnectTimeout(room, userId, side) {
+    if (!room) return;
+
+    // Đảm bảo chỉ chốt kết quả đúng một lần
+    if (room.status !== 'PLAYING' && !room.reconnectState) return;
+
+    const redSockets = room.players.red ? (this.userSockets.get(room.players.red.id) || new Set()) : new Set();
+    const blackSockets = room.players.black ? (this.userSockets.get(room.players.black.id) || new Set()) : new Set();
+    const hasActiveRed = Array.from(redSockets).some((s) => {
+      const m = this.clients.get(s);
+      return m && m.roomCode === room.code;
+    });
+    const hasActiveBlack = Array.from(blackSockets).some((s) => {
+      const m = this.clients.get(s);
+      return m && m.roomCode === room.code;
+    });
+
+    // 1. Ngoại lệ sự cố hệ thống: Cả hai cùng mất kết nối -> không tự trao thắng, không thay đổi Elo
+    if (!hasActiveRed && !hasActiveBlack) {
+      room.status = 'WAITING_OPPONENT';
+      if (room.matchState) {
+        room.matchState.status = 'completed';
+        room.matchState.winner = null;
+        room.matchState.endReason = 'SYSTEM_ERROR';
+      }
+      room.reconnectState = null;
+      this.clearDisconnectTimer(room.code);
+
+      this.broadcastToRoom(room.code, {
+        type: 'matchEnded',
+        winner: null,
+        winnerColor: null,
+        reason: 'SYSTEM_ERROR',
+        endReason: 'SYSTEM_ERROR',
+        message: 'Trận đấu bị hủy và không ghi nhận kết quả do sự cố hệ thống khiến cả hai người chơi cùng mất kết nối.',
+        room: room.getSummary(),
+      });
+      return;
+    }
+
+    // 2. Xử thua do mất kết nối quá 60 giây (COT-595)
+    const winningSide = side === 'RED' ? 'BLACK' : 'RED';
+    const winningUser = winningSide === 'BLACK' ? room.players.black : room.players.red;
+    const losingUser = side === 'RED' ? room.players.red : room.players.black;
+    const winnerColor = winningSide.toLowerCase();
+
+    // Khóa bàn cờ, không nhận thêm nước đi
+    room.status = 'WAITING_OPPONENT';
+    if (room.matchState) {
+      room.matchState.status = 'completed';
+      room.matchState.winner = winnerColor;
+      room.matchState.endReason = 'DISCONNECT_TIMEOUT';
+      room.matchState.isPaused = false;
+    }
+    room.reconnectState = null;
+    this.clearDisconnectTimer(room.code);
+
+    // Tính điểm Elo theo công thức K=32 cho trận PvP
+    let winnerEloResult = { change: 0, newRating: winningUser?.eloRating ?? 1000 };
+    let loserEloResult = { change: 0, newRating: losingUser?.eloRating ?? 1000 };
+
+    if (winningUser && losingUser) {
+      const { calculateElo } = require('../../domain/services/eloCalculator');
+      const wRating = Number(winningUser.eloRating ?? 1000);
+      const lRating = Number(losingUser.eloRating ?? 1000);
+
+      winnerEloResult = calculateElo(wRating, lRating, 1, 32);
+      loserEloResult = calculateElo(lRating, wRating, 0, 32);
+
+      winningUser.eloRating = winnerEloResult.newRating;
+      losingUser.eloRating = loserEloResult.newRating;
+
+      if (this.userRepository && typeof this.userRepository.updateElo === 'function') {
+        try {
+          await this.userRepository.updateElo(winningUser.id, winnerEloResult.newRating);
+          await this.userRepository.updateElo(losingUser.id, loserEloResult.newRating);
+        } catch (err) {
+          console.error('Lỗi khi cập nhật Elo vào database:', err);
+        }
+      }
+    }
+
+    // Lưu ván đấu vào lịch sử phòng
+    if (!room.history) room.history = [];
+    const historyRecord = {
+      matchId: room.matchId,
+      roomCode: room.code,
+      winnerUserId: winningUser ? winningUser.id : null,
+      loserUserId: losingUser ? losingUser.id : null,
+      winner: winnerColor,
+      endReason: 'DISCONNECT_TIMEOUT',
+      winnerEloChange: winnerEloResult.change,
+      loserEloChange: loserEloResult.change,
+      finishedAt: new Date(),
+    };
+    room.history.push(historyRecord);
+
+    // Phát thông báo kết thúc trận đấu tới đối thủ và khán giả
+    const resultMessage = `Kỳ thủ bên ${winningSide === 'RED' ? 'Đỏ' : 'Đen'} Thắng do đối thủ mất kết nối quá thời gian quy định (60 giây).`;
+    this.broadcastToRoom(room.code, {
+      type: 'matchEnded',
+      winner: winnerColor,
+      winnerColor,
+      reason: 'DISCONNECT_TIMEOUT',
+      endReason: 'DISCONNECT_TIMEOUT',
+      winnerUserId: winningUser ? winningUser.id : null,
+      loserUserId: losingUser ? losingUser.id : null,
+      winnerEloChange: winnerEloResult.change,
+      loserEloChange: loserEloResult.change,
+      winnerNewElo: winnerEloResult.newRating,
+      loserNewElo: loserEloResult.newRating,
+      message: resultMessage,
+      room: room.getSummary(),
+    });
+
+    // Chuyển phòng sang trạng thái Đang chờ trận mới, chuyển quyền Chủ phòng nếu người mất mạng là Host
+    room.readyStates.clear();
+    const wasHost = Number(room.hostId) === Number(userId);
+
+    room.removeParticipant(userId);
+
+    if (wasHost) {
+      const transferResult = room.transferHost();
+      if (transferResult.newHostId) {
+        const newHostSockets = this.userSockets.get(transferResult.newHostId);
+        if (newHostSockets) {
+          for (const s of newHostSockets) {
+            const m = this.clients.get(s);
+            if (m && m.roomCode === room.code) {
+              m.role = 'PLAYER';
+              m.side = 'RED';
+            }
+          }
+        }
+
+        this.broadcastToRoom(room.code, {
+          type: 'HostTransferred',
+          previousHostId: transferResult.oldHostId,
+          newHostId: transferResult.newHostId,
+          newHost: transferResult.newHost,
+          room: room.getSummary(),
+        });
+      }
+    }
+
+    this.broadcastToRoom(room.code, {
+      type: 'UserLeft',
+      userId,
+      room: room.getSummary(),
+    });
+
     if (typeof this.onDisconnectTimeout === 'function') {
       this.onDisconnectTimeout(room, userId, side);
     }

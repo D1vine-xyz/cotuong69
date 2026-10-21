@@ -92,6 +92,14 @@ class PgUserRepository {
     }
     return await this.findById(userId);
   }
+
+  async updateElo(userId, eloRating) {
+    await this.db.query(
+      `UPDATE users SET elo_rating = $1 WHERE id = $2`,
+      [Number(eloRating), Number(userId)]
+    );
+    return await this.findById(userId);
+  }
 }
 
 module.exports = PgUserRepository;
