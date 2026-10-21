@@ -8,27 +8,54 @@ class RoomHub {
   constructor({
     roomManager = defaultRoomManager,
     tokenService = { verifyAccessToken },
+    heartbeatIntervalMs = 5000,
+    heartbeatTimeoutMs = 10000,
+    reconnectCountdownSeconds = 60,
+    enableHeartbeat = false,
   } = {}) {
     this.roomManager = roomManager;
     this.tokenService = tokenService;
+    this.heartbeatIntervalMs = Number(heartbeatIntervalMs);
+    this.heartbeatTimeoutMs = Number(heartbeatTimeoutMs);
+    this.reconnectCountdownSeconds = Number(reconnectCountdownSeconds);
 
     this.wss = new WebSocketServer({ noServer: true });
 
     // Ánh xạ ConnectionId <-> UserId và Socket metadata
-    this.clients = new Map(); // socket -> { connectionId, userId, user, roomCode, role, side }
+    this.clients = new Map(); // socket -> { connectionId, userId, user, roomCode, role, side, lastSeen, lastPong, connectedAt }
     this.userSockets = new Map(); // userId -> Set<socket>
     this.connectionUsers = new Map(); // connectionId -> userId
 
     // Gom nhóm kết nối theo từng phòng chơi (Room Group: Room_{roomCode})
     this.roomGroups = new Map(); // roomCode -> Set<socket>
 
+    // Quản lý Timer đếm ngược 60s khi người chơi mất kết nối (COT-593, COT-595)
+    this.disconnectTimers = new Map(); // roomCode -> { interval, userId, side }
+    this.heartbeatTimer = null;
+
     this.setupWss();
+
+    if (enableHeartbeat) {
+      this.startHeartbeat();
+    }
   }
 
   setupWss() {
     this.wss.on('connection', (socket, request, user, room) => {
       const connectionId = `conn_${crypto.randomUUID()}`;
       const userId = Number(user.id);
+
+      // Nếu phòng đang diễn ra ván đấu và người kết nối lại là người chơi đang bị mất kết nối (COT-594)
+      const isReconnectingPlayer = Boolean(
+        room.status === 'PLAYING' &&
+        room.reconnectState &&
+        Number(room.reconnectState.disconnectedUserId) === userId
+      );
+
+      if (isReconnectingPlayer) {
+        this.clearDisconnectTimer(room.code);
+        room.resumeMatchAfterReconnect(userId);
+      }
 
       // Thêm người chơi vào phòng logic (nếu chưa có trong phòng)
       let roleInfo;
@@ -49,6 +76,8 @@ class RoomHub {
         role: roleInfo.role,
         side: roleInfo.side,
         connectedAt: Date.now(),
+        lastSeen: Date.now(),
+        lastPong: Date.now(),
       };
       this.clients.set(socket, clientMeta);
 
@@ -79,18 +108,45 @@ class RoomHub {
         room: room.getSummary(),
       });
 
-      // Broadcast sự kiện UserJoined thời gian thực tới toàn bộ nhóm phòng
-      this.broadcastToRoom(room.code, {
-        type: 'UserJoined',
-        user: {
-          id: user.id,
-          username: user.username,
-          displayName: user.displayName || user.username,
-        },
-        role: roleInfo.role,
-        side: roleInfo.side,
-        room: room.getSummary(),
-      });
+      // Nếu là người chơi kết nối lại: gửi snapshot khôi phục trạng thái và broadcast Reconnected
+      if (isReconnectingPlayer) {
+        this.send(socket, {
+          type: 'reconnectState',
+          state: room.getSnapshot(),
+          snapshot: room.getSnapshot(),
+          role: roleInfo.role,
+          side: roleInfo.side,
+          room: room.getSummary(),
+        });
+
+        this.broadcastToRoom(room.code, {
+          type: 'PlayerReconnected',
+          userId,
+          player: roleInfo.side ? roleInfo.side.toLowerCase() : 'opponent',
+          side: roleInfo.side,
+          roomCode: room.code,
+          room: room.getSummary(),
+        });
+
+        this.broadcastToRoom(room.code, {
+          type: 'opponentReconnected',
+          player: roleInfo.side ? roleInfo.side.toLowerCase() : 'opponent',
+          roomCode: room.code,
+        });
+      } else {
+        // Broadcast sự kiện UserJoined thời gian thực tới toàn bộ nhóm phòng
+        this.broadcastToRoom(room.code, {
+          type: 'UserJoined',
+          user: {
+            id: user.id,
+            username: user.username,
+            displayName: user.displayName || user.username,
+          },
+          role: roleInfo.role,
+          side: roleInfo.side,
+          room: room.getSummary(),
+        });
+      }
 
       // Lắng nghe sự kiện từ client
       socket.on('message', (data) => this.handleMessage(socket, data));
@@ -161,6 +217,8 @@ class RoomHub {
     const meta = this.clients.get(socket);
     if (!meta) return;
 
+    meta.lastSeen = Date.now();
+
     let payload;
     try {
       payload = JSON.parse(rawMessage.toString());
@@ -169,13 +227,19 @@ class RoomHub {
       return;
     }
 
+    const type = payload.type;
+
+    // 0. Xử lý gói tin Heartbeat Pong từ Client (COT-593)
+    if (type === 'pong') {
+      meta.lastPong = Date.now();
+      return;
+    }
+
     const room = this.roomManager.findByCode(meta.roomCode);
     if (!room) {
       this.send(socket, { type: 'error', code: 'ROOM_NOT_FOUND', message: 'Phòng chơi không tồn tại hoặc đã đóng.' });
       return;
     }
-
-    const type = payload.type;
 
     // 1. Phân quyền Socket nghiêm ngặt: Chặn 100% mọi yêu cầu thi đấu hoặc can thiệp ván cờ gửi từ Khán giả
     const roleInfo = room.getParticipantRole(meta.userId);
@@ -326,7 +390,7 @@ class RoomHub {
     }
   }
 
-  handleDisconnect(socket) {
+  handleDisconnect(socket, reason = 'DISCONNECT') {
     const meta = this.clients.get(socket);
     if (!meta) return;
 
@@ -350,8 +414,47 @@ class RoomHub {
     const room = this.roomManager.findByCode(meta.roomCode);
     if (!room) return;
 
+    // Kiểm tra xem user này còn socket nào khác trong cùng phòng không (multi-tab)
+    const remainingSockets = this.userSockets.get(meta.userId);
+    const hasOtherSocketInRoom = remainingSockets && Array.from(remainingSockets).some((s) => {
+      const m = this.clients.get(s);
+      return m && m.roomCode === room.code;
+    });
+    if (hasOtherSocketInRoom) {
+      return;
+    }
+
     try {
-      // Nếu người rời đi là Chủ phòng và ván chưa bắt đầu: Tự động chuyển quyền Chủ phòng
+      // 1. Nếu ván đấu đang diễn ra và người ngắt kết nối là Người chơi (PLAYER) (COT-593)
+      if (room.status === 'PLAYING' && meta.role === 'PLAYER') {
+        const pauseResult = room.pauseMatchForDisconnect(meta.userId, this.reconnectCountdownSeconds);
+        if (pauseResult) {
+          // Bắt đầu bộ đếm 60 giây tại máy chủ (COT-593, COT-595)
+          this.startDisconnectTimer(room, meta.userId, meta.side);
+
+          // Phát thông báo tới đối thủ và toàn bộ khán giả trong phòng
+          this.broadcastToRoom(room.code, {
+            type: 'PlayerDisconnected',
+            userId: meta.userId,
+            player: meta.side ? meta.side.toLowerCase() : 'opponent',
+            side: meta.side,
+            countdownSeconds: this.reconnectCountdownSeconds,
+            roomCode: room.code,
+            room: room.getSummary(),
+          });
+
+          // Tương thích với frontend ReconnectManager
+          this.broadcastToRoom(room.code, {
+            type: 'opponentDisconnected',
+            player: meta.side ? meta.side.toLowerCase() : 'opponent',
+            countdownSeconds: this.reconnectCountdownSeconds,
+            roomCode: room.code,
+          });
+        }
+        return;
+      }
+
+      // 2. Nếu người rời đi là Chủ phòng và ván chưa bắt đầu: Tự động chuyển quyền Chủ phòng
       if (Number(room.hostId) === meta.userId && room.status !== 'PLAYING') {
         const transferResult = room.transferHost();
 
@@ -395,6 +498,76 @@ class RoomHub {
     }
   }
 
+  startHeartbeat() {
+    if (this.heartbeatTimer) clearInterval(this.heartbeatTimer);
+    this.heartbeatTimer = setInterval(() => this.checkHeartbeats(), this.heartbeatIntervalMs);
+    if (this.heartbeatTimer.unref) this.heartbeatTimer.unref();
+  }
+
+  stopHeartbeat() {
+    if (this.heartbeatTimer) {
+      clearInterval(this.heartbeatTimer);
+      this.heartbeatTimer = null;
+    }
+  }
+
+  checkHeartbeats() {
+    const now = Date.now();
+    for (const [socket, meta] of Array.from(this.clients.entries())) {
+      if (socket.readyState !== 1) continue;
+
+      // Quá heartbeatTimeoutMs không có phản hồi -> đánh dấu mất kết nối (COT-593)
+      if (now - meta.lastSeen >= this.heartbeatTimeoutMs) {
+        try {
+          socket.close(4008, 'Heartbeat timeout');
+        } catch {
+          try { socket.terminate(); } catch {}
+        }
+        this.handleDisconnect(socket, 'HEARTBEAT_TIMEOUT');
+        continue;
+      }
+
+      // Gửi gói Ping định kỳ mỗi 5 giây
+      this.send(socket, {
+        type: 'ping',
+        timestamp: now,
+      });
+    }
+  }
+
+  startDisconnectTimer(room, userId, side) {
+    this.clearDisconnectTimer(room.code);
+
+    let remaining = this.reconnectCountdownSeconds;
+    const interval = setInterval(() => {
+      remaining -= 1;
+      if (room.reconnectState) {
+        room.reconnectState.countdownSeconds = Math.max(0, remaining);
+      }
+      if (remaining <= 0) {
+        this.clearDisconnectTimer(room.code);
+        this.handleDisconnectTimeout(room, userId, side);
+      }
+    }, 1000);
+
+    if (interval.unref) interval.unref();
+    this.disconnectTimers.set(room.code, { interval, userId, side });
+  }
+
+  clearDisconnectTimer(roomCode) {
+    if (this.disconnectTimers.has(roomCode)) {
+      const item = this.disconnectTimers.get(roomCode);
+      clearInterval(item.interval);
+      this.disconnectTimers.delete(roomCode);
+    }
+  }
+
+  handleDisconnectTimeout(room, userId, side) {
+    if (typeof this.onDisconnectTimeout === 'function') {
+      this.onDisconnectTimeout(room, userId, side);
+    }
+  }
+
   broadcastToRoom(roomCode, message) {
     const group = this.roomGroups.get(roomCode);
     if (!group) return;
@@ -433,6 +606,10 @@ class RoomHub {
   }
 
   close() {
+    this.stopHeartbeat();
+    for (const [code] of Array.from(this.disconnectTimers.entries())) {
+      this.clearDisconnectTimer(code);
+    }
     for (const socket of Array.from(this.clients.keys())) {
       try {
         socket.terminate();
