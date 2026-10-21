@@ -1,3 +1,5 @@
+const { createInitialBoard } = require('../rules/board');
+
 class Room {
   constructor({
     code,
@@ -30,6 +32,10 @@ class Room {
     this.readyStates = new Set();
     this.kickedUsers = new Set();
     this.matchId = null;
+
+    // Trạng thái ván đấu & Reconnect (COT-593, COT-594, COT-595)
+    this.matchState = null;
+    this.reconnectState = null;
   }
 
   getDeepLink(baseUrl = '') {
@@ -176,6 +182,21 @@ class Room {
       },
       readyStates: Array.from(this.readyStates),
       matchId: this.matchId,
+      matchState: this.matchState ? {
+        matchId: this.matchState.matchId,
+        currentTurn: this.matchState.currentTurn,
+        turnRemainingSeconds: this.getRemainingTurnSeconds(),
+        remainingClocks: { ...this.matchState.remainingClocks },
+        isPaused: Boolean(this.matchState.isPaused),
+        inCheck: Boolean(this.matchState.inCheck),
+        checkedColor: this.matchState.checkedColor,
+      } : null,
+      reconnectState: this.reconnectState ? {
+        disconnectedUserId: this.reconnectState.disconnectedUserId,
+        disconnectedSide: this.reconnectState.disconnectedSide,
+        countdownSeconds: this.reconnectState.countdownSeconds,
+        isPaused: true,
+      } : null,
       createdAt: this.createdAt,
     };
   }
@@ -213,7 +234,78 @@ class Room {
     return this.readyStates.has(this.players.red.id) && this.readyStates.has(this.players.black.id);
   }
 
-  startGame(hostId) {
+  getRemainingTurnSeconds() {
+    if (!this.matchState) return 0;
+    if (this.matchState.isPaused) return this.matchState.turnRemainingSeconds;
+    const elapsed = Math.max(0, Math.floor((Date.now() - this.matchState.turnStartedAt) / 1000));
+    return Math.max(0, this.matchState.turnRemainingSeconds - elapsed);
+  }
+
+  pauseMatchForDisconnect(userId, countdownSeconds = 60) {
+    if (this.status !== 'PLAYING' || !this.matchState) return null;
+    const uid = Number(userId);
+    const roleInfo = this.getParticipantRole(uid);
+    if (!roleInfo || roleInfo.role !== 'PLAYER') return null;
+
+    const remaining = this.getRemainingTurnSeconds();
+    this.matchState.turnRemainingSeconds = remaining;
+    this.matchState.isPaused = true;
+
+    this.reconnectState = {
+      disconnectedUserId: uid,
+      disconnectedSide: roleInfo.side,
+      countdownSeconds: Number(countdownSeconds),
+      pausedAt: Date.now(),
+    };
+
+    return {
+      room: this.getSummary(),
+      reconnectState: this.reconnectState,
+      turnRemainingSeconds: remaining,
+    };
+  }
+
+  resumeMatchAfterReconnect(userId) {
+    if (!this.reconnectState) return null;
+    if (Number(this.reconnectState.disconnectedUserId) !== Number(userId)) return null;
+
+    if (this.matchState) {
+      this.matchState.isPaused = false;
+      this.matchState.turnStartedAt = Date.now();
+    }
+
+    const resumedState = { ...this.reconnectState };
+    this.reconnectState = null;
+
+    return {
+      room: this.getSummary(),
+      resumedState,
+    };
+  }
+
+  getSnapshot() {
+    if (!this.matchState) return null;
+    return {
+      matchId: this.matchId,
+      roomCode: this.code,
+      status: this.matchState.status || this.status,
+      currentTurn: this.matchState.currentTurn,
+      turnRemainingSeconds: this.getRemainingTurnSeconds(),
+      remainingClocks: { ...this.matchState.remainingClocks },
+      inCheck: Boolean(this.matchState.inCheck),
+      checkedColor: this.matchState.checkedColor,
+      board: this.matchState.board,
+      capturedPieces: this.matchState.capturedPieces,
+      isPaused: Boolean(this.reconnectState),
+      reconnectCountdown: this.reconnectState ? this.reconnectState.countdownSeconds : null,
+      players: {
+        red: this.players.red,
+        black: this.players.black,
+      },
+    };
+  }
+
+  startGame(hostId, matchOptions = {}) {
     if (hostId && Number(hostId) !== Number(this.hostId)) {
       const err = new Error('Chỉ chủ phòng mới có quyền bắt đầu trận đấu.');
       err.code = 'FORBIDDEN';
@@ -238,6 +330,27 @@ class Room {
 
     this.status = 'PLAYING';
     this.matchId = `MATCH_${this.code}_${Date.now()}`;
+    const initialTurnSeconds = matchOptions.turnDurationSeconds || 60;
+    const initialClocks = matchOptions.remainingClocks || { red: 300, black: 300 };
+
+    this.matchState = {
+      matchId: this.matchId,
+      status: 'active',
+      currentTurn: 'red',
+      turnDurationSeconds: initialTurnSeconds,
+      turnRemainingSeconds: initialTurnSeconds,
+      remainingClocks: { ...initialClocks },
+      turnStartedAt: Date.now(),
+      isPaused: false,
+      board: matchOptions.board || createInitialBoard(),
+      capturedPieces: { red: [], black: [] },
+      inCheck: false,
+      checkedColor: null,
+      winner: null,
+      endReason: null,
+    };
+    this.reconnectState = null;
+
     return {
       alreadyStarted: false,
       matchId: this.matchId,
