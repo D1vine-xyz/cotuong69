@@ -67,16 +67,18 @@ class RoomManager {
   }
 
   closeRoom(code, userId) {
-    const room = this.findByCode(code);
+    if (!code) return false;
+    const cleanCode = code.toString().toUpperCase().trim();
+    const room = this.rooms.get(cleanCode);
     if (!room) return false;
-    if (room.hostId !== Number(userId)) {
+    if (userId !== undefined && room.hostId !== null && Number(room.hostId) !== Number(userId)) {
       const err = new Error('Chỉ chủ phòng mới có quyền đóng phòng.');
       err.code = 'FORBIDDEN';
       err.statusCode = 403;
       throw err;
     }
     room.status = 'CLOSED';
-    this.rooms.delete(code.toUpperCase().trim());
+    this.rooms.delete(cleanCode);
     return true;
   }
 
