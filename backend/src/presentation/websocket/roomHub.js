@@ -283,7 +283,43 @@ class RoomHub {
       return;
     }
 
-    // 6. Rời phòng (leave)
+    // 6. Chat riêng giữa hai người chơi (COT-625)
+    if (type === 'chat' || type === 'chat:send') {
+      if (isSpectator) {
+        this.send(socket, {
+          type: 'error',
+          code: 'FORBIDDEN',
+          message: 'Chỉ hai người chơi đang thi đấu mới được sử dụng Chat riêng. Khán giả không có quyền truy cập.',
+        });
+        return;
+      }
+
+      const text = payload.text || payload.message || '';
+      if (typeof text !== 'string' || !text.trim()) {
+        this.send(socket, {
+          type: 'error',
+          code: 'EMPTY_MESSAGE',
+          message: 'Không thể gửi tin nhắn rỗng hoặc chỉ chứa khoảng trắng.',
+        });
+        return;
+      }
+
+      const chatMsg = {
+        type: 'ChatMessage',
+        id: `msg_${Date.now()}_${crypto.randomUUID().slice(0, 8)}`,
+        roomCode: room.code,
+        senderId: meta.userId,
+        senderName: meta.user.displayName || meta.user.username,
+        side: roleInfo.side,
+        text: text.trim(),
+        timestamp: Date.now(),
+      };
+
+      this.broadcastToPlayers(room, chatMsg);
+      return;
+    }
+
+    // 7. Rời phòng (leave)
     if (type === 'leave') {
       socket.close(1000, 'User left');
       return;
@@ -367,6 +403,25 @@ class RoomHub {
     for (const client of group) {
       if (client.readyState === 1) { // WebSocket.OPEN
         client.send(raw);
+      }
+    }
+  }
+
+  broadcastToPlayers(room, message) {
+    const raw = JSON.stringify(message);
+    const playerIds = new Set();
+    if (room.players.red) playerIds.add(Number(room.players.red.id));
+    if (room.players.black) playerIds.add(Number(room.players.black.id));
+
+    const group = this.roomGroups.get(room.code);
+    if (!group) return;
+
+    for (const client of group) {
+      const meta = this.clients.get(client);
+      if (meta && playerIds.has(meta.userId) && meta.role === 'PLAYER') {
+        if (client.readyState === 1) { // WebSocket.OPEN
+          client.send(raw);
+        }
       }
     }
   }
