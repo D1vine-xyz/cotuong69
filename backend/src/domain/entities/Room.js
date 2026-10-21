@@ -37,6 +37,9 @@ class Room {
     // Trạng thái ván đấu & Reconnect (COT-593, COT-594, COT-595)
     this.matchState = null;
     this.reconnectState = null;
+
+    // Trạng thái Video Call WebRTC (COT-624, COT-626)
+    this.videoCall = null;
   }
 
   getDeepLink(baseUrl = '') {
@@ -552,6 +555,140 @@ class Room {
       newHostId: this.hostId,
       newHost,
       room: this.getSummary(),
+    };
+  }
+
+  // Quản lý Video Call WebRTC (COT-624, COT-626)
+  initiateVideoCall(callerId) {
+    const uid = Number(callerId);
+    const roleInfo = this.getParticipantRole(uid);
+    if (!roleInfo || roleInfo.role !== 'PLAYER') {
+      const err = new Error('Khán giả không được bắt đầu, không được tham gia và không được xem cuộc gọi.');
+      err.code = 'FORBIDDEN';
+      err.statusCode = 403;
+      throw err;
+    }
+
+    if (!this.players.red || !this.players.black) {
+      const err = new Error('Cần có đối thủ trong phòng để thực hiện Video Call.');
+      err.code = 'OPPONENT_NOT_FOUND';
+      err.statusCode = 400;
+      throw err;
+    }
+
+    if (this.videoCall && ['RINGING', 'CONNECTED'].includes(this.videoCall.status)) {
+      const err = new Error('Mỗi Room chỉ có tối đa một cuộc gọi đang hoạt động.');
+      err.code = 'CALL_ALREADY_EXISTS';
+      err.statusCode = 409;
+      throw err;
+    }
+
+    const isRed = this.players.red && Number(this.players.red.id) === uid;
+    const opponent = isRed ? this.players.black : this.players.red;
+    const calleeId = Number(opponent.id);
+
+    const callId = `call_${Date.now()}_${Math.random().toString(36).slice(2, 7)}`;
+    this.videoCall = {
+      callId,
+      callerId: uid,
+      calleeId,
+      callerSide: roleInfo.side,
+      calleeSide: isRed ? 'BLACK' : 'RED',
+      status: 'RINGING',
+      startedAt: Date.now(),
+      timeoutTimer: null,
+    };
+
+    return {
+      callId,
+      callerId: uid,
+      calleeId,
+      opponent,
+      callerSide: roleInfo.side,
+    };
+  }
+
+  acceptVideoCall(userId) {
+    const uid = Number(userId);
+    if (!this.videoCall || this.videoCall.status !== 'RINGING') {
+      const err = new Error('Không tìm thấy cuộc gọi đang chờ phản hồi hoặc cuộc gọi đã hết hạn.');
+      err.code = 'CALL_NOT_FOUND';
+      err.statusCode = 404;
+      throw err;
+    }
+
+    if (Number(this.videoCall.calleeId) !== uid) {
+      const err = new Error('Chỉ người nhận cuộc gọi mới được chấp nhận.');
+      err.code = 'FORBIDDEN';
+      err.statusCode = 403;
+      throw err;
+    }
+
+    if (this.videoCall.timeoutTimer) {
+      clearTimeout(this.videoCall.timeoutTimer);
+      this.videoCall.timeoutTimer = null;
+    }
+
+    this.videoCall.status = 'CONNECTED';
+    this.videoCall.connectedAt = Date.now();
+
+    return {
+      callId: this.videoCall.callId,
+      callerId: this.videoCall.callerId,
+      calleeId: this.videoCall.calleeId,
+    };
+  }
+
+  rejectVideoCall(userId, reason = 'REJECTED') {
+    const uid = Number(userId);
+    if (!this.videoCall || this.videoCall.status !== 'RINGING') {
+      const err = new Error('Không tìm thấy cuộc gọi đang chờ phản hồi.');
+      err.code = 'CALL_NOT_FOUND';
+      err.statusCode = 404;
+      throw err;
+    }
+
+    if (![Number(this.videoCall.callerId), Number(this.videoCall.calleeId)].includes(uid)) {
+      const err = new Error('Bạn không tham gia vào cuộc gọi này.');
+      err.code = 'FORBIDDEN';
+      err.statusCode = 403;
+      throw err;
+    }
+
+    if (this.videoCall.timeoutTimer) {
+      clearTimeout(this.videoCall.timeoutTimer);
+      this.videoCall.timeoutTimer = null;
+    }
+
+    const { callId, callerId, calleeId } = this.videoCall;
+    this.videoCall = null;
+
+    return {
+      callId,
+      callerId,
+      calleeId,
+      reason,
+      cancelledByCaller: uid === Number(callerId),
+    };
+  }
+
+  endVideoCall(userId = null, reason = 'USER_HANGUP') {
+    if (!this.videoCall) return null;
+
+    if (this.videoCall.timeoutTimer) {
+      clearTimeout(this.videoCall.timeoutTimer);
+      this.videoCall.timeoutTimer = null;
+    }
+
+    const prevCall = { ...this.videoCall };
+    this.videoCall = null;
+
+    return {
+      callId: prevCall.callId,
+      callerId: prevCall.callerId,
+      calleeId: prevCall.calleeId,
+      endedBy: userId ? Number(userId) : null,
+      reason,
     };
   }
 }
