@@ -1,7 +1,9 @@
 import { useEffect, useRef, useState } from 'react';
 import XiangqiBoard from './presentation/components/board/XiangqiBoard';
 import ChatBox from './presentation/components/chat/ChatBox';
+import VideoCallOverlay from './presentation/components/video/VideoCallOverlay';
 import { useMatch } from './application/hooks/useMatch';
+import { useWebRtcCall } from './application/hooks/useWebRtcCall';
 import './styles.css';
 
 function formatClock(seconds = 0) {
@@ -130,7 +132,40 @@ function App() {
     simulateOpponentDisconnect,
     simulateOpponentReconnect,
     simulateServerMatchResult,
+    sendSignaling,
+    setSignalingHandler,
   } = useMatch(matchId);
+
+  const currentUserName = color === 'red' ? match?.players?.red?.name : color === 'black' ? match?.players?.black?.name : 'Khán Giả';
+  const opponentUserName = color === 'red' ? match?.players?.black?.name : color === 'black' ? match?.players?.red?.name : 'Đối thủ';
+
+  const {
+    callStatus,
+    incomingCall,
+    remoteStream,
+    localStream,
+    isMicMuted,
+    isCamOff,
+    isRemoteCamOff,
+    startCall,
+    acceptCall,
+    rejectCall,
+    endCall,
+    toggleMic,
+    toggleCam,
+    handleSignalingMessage,
+  } = useWebRtcCall({
+    sendSignaling,
+    isSpectator: readOnly,
+    userName: currentUserName || 'Bạn',
+    opponentName: opponentUserName || 'Đối thủ',
+  });
+
+  useEffect(() => {
+    if (typeof setSignalingHandler === 'function') {
+      setSignalingHandler(handleSignalingMessage);
+    }
+  }, [setSignalingHandler, handleSignalingMessage]);
 
   useEffect(() => {
     document.body.classList.toggle('match-view', Boolean(matchId));
@@ -477,6 +512,26 @@ function App() {
         </section>
 
         <aside className="info-column">
+          {/* COT-629: Cuộc gọi Video WebRTC giữa hai người chơi */}
+          <VideoCallOverlay
+            callStatus={callStatus}
+            incomingCall={incomingCall}
+            remoteStream={remoteStream}
+            localStream={localStream}
+            isMicMuted={isMicMuted}
+            isCamOff={isCamOff}
+            isRemoteCamOff={isRemoteCamOff}
+            isSpectator={readOnly}
+            userName={currentUserName || 'Bạn'}
+            opponentName={opponentUserName || 'Đối thủ'}
+            onStartCall={startCall}
+            onAccept={acceptCall}
+            onReject={rejectCall}
+            onEnd={endCall}
+            onToggleMic={toggleMic}
+            onToggleCam={toggleCam}
+          />
+
           <section className="info-card turn-card">
             <div className="card-heading">
               <span className="heading-icon turn-icon" aria-hidden="true">↗</span>
