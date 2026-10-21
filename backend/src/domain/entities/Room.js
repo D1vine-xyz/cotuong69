@@ -1,4 +1,5 @@
 const { createInitialBoard } = require('../rules/board');
+const { createInitialArmy } = require('./cot615Match');
 
 class Room {
   constructor({
@@ -70,13 +71,6 @@ class Room {
       throw err;
     }
 
-    if (this.status === 'CLOSED' || this.status === 'FINISHED') {
-      const err = new Error('Phòng cờ đã kết thúc hoặc bị đóng.');
-      err.code = 'ROOM_CLOSED';
-      err.statusCode = 410;
-      throw err;
-    }
-
     const uid = Number(user.id);
     if (this.kickedUsers.has(uid)) {
       const err = new Error('Bạn đã bị chủ phòng loại khỏi phòng này.');
@@ -92,6 +86,13 @@ class Room {
         isNew: false,
         room: this.getSummary(),
       };
+    }
+
+    if (this.status === 'CLOSED' || this.status === 'FINISHED') {
+      const err = new Error('Phòng cờ đã kết thúc hoặc bị đóng.');
+      err.code = 'ROOM_CLOSED';
+      err.statusCode = 410;
+      throw err;
     }
 
     const userData = {
@@ -288,7 +289,7 @@ class Room {
     return {
       matchId: this.matchId,
       roomCode: this.code,
-      status: this.matchState.status || this.status,
+      status: this.status === 'FINISHED' ? 'completed' : (this.matchState.status || this.status),
       currentTurn: this.matchState.currentTurn,
       turnRemainingSeconds: this.getRemainingTurnSeconds(),
       remainingClocks: { ...this.matchState.remainingClocks },
@@ -296,8 +297,11 @@ class Room {
       checkedColor: this.matchState.checkedColor,
       board: this.matchState.board,
       capturedPieces: this.matchState.capturedPieces,
+      lastMove: this.matchState.lastMove,
       isPaused: Boolean(this.reconnectState),
       reconnectCountdown: this.reconnectState ? this.reconnectState.countdownSeconds : null,
+      winner: this.matchState.winner || null,
+      endReason: this.matchState.endReason || null,
       players: {
         red: this.players.red,
         black: this.players.black,
@@ -342,12 +346,13 @@ class Room {
       remainingClocks: { ...initialClocks },
       turnStartedAt: Date.now(),
       isPaused: false,
-      board: matchOptions.board || createInitialBoard(),
+      board: matchOptions.board || createInitialArmy(),
       capturedPieces: { red: [], black: [] },
       inCheck: false,
       checkedColor: null,
       winner: null,
       endReason: null,
+      lastMove: null,
     };
     this.reconnectState = null;
 
@@ -356,6 +361,58 @@ class Room {
       matchId: this.matchId,
       status: this.status,
       startedAt: new Date(),
+    };
+  }
+
+  applyMove(color, from, to) {
+    if (!this.matchState) return { accepted: false, error: 'Chưa có trạng thái trận đấu.' };
+    if (this.status !== 'PLAYING' || this.matchState.isPaused) {
+      return { accepted: false, error: 'Trận đấu đang tạm dừng hoặc không hoạt động.' };
+    }
+    if (color !== this.matchState.currentTurn) {
+      return { accepted: false, error: 'Chưa tới lượt của bạn.' };
+    }
+
+    const { getLegalMoveError, hasLegalMove, isInCheck } = require('./xiangqiRules');
+    const error = getLegalMoveError(this.matchState.board, color, from, to);
+    if (error) return { accepted: false, error };
+
+    const capturedPiece = this.matchState.board.find((p) => p.position === to);
+    const movingPiece = this.matchState.board.find((p) => p.position === from);
+
+    this.matchState.board = this.matchState.board
+      .filter((p) => p.position !== to && p.id !== movingPiece.id)
+      .concat({ ...movingPiece, position: to });
+
+    if (capturedPiece) {
+      if (!this.matchState.capturedPieces[capturedPiece.color]) {
+        this.matchState.capturedPieces[capturedPiece.color] = [];
+      }
+      this.matchState.capturedPieces[capturedPiece.color].push(capturedPiece);
+    }
+
+    const nextTurn = color === 'red' ? 'black' : 'red';
+    this.matchState.currentTurn = nextTurn;
+    this.matchState.turnStartedAt = Date.now();
+    this.matchState.turnRemainingSeconds = this.matchState.turnDurationSeconds || 60;
+    this.matchState.lastMove = { from, to, color, captured: Boolean(capturedPiece) };
+
+    const inCheck = isInCheck(this.matchState.board, nextTurn);
+    this.matchState.inCheck = inCheck;
+    this.matchState.checkedColor = inCheck ? nextTurn : null;
+
+    if (!hasLegalMove(this.matchState.board, nextTurn)) {
+      this.matchState.status = 'completed';
+      this.status = 'FINISHED';
+      this.matchState.winner = color;
+      this.matchState.endReason = 'CHECKMATE';
+    }
+
+    return {
+      accepted: true,
+      captured: Boolean(capturedPiece),
+      capturedPiece,
+      inCheck,
     };
   }
 
