@@ -1,14 +1,347 @@
 /* Video Call Styling (COT-628, COT-629) */
 
+/* Nút khởi tạo cuộc gọi */
+.video-call-launcher {
+  display: inline-flex;
+  align-items: center;
+  margin: 6px 0;
+}
+
+.btn-call-start {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  background: linear-gradient(135deg, #2b8a3e, #237032);
+  color: #fff;
+  border: 1px solid rgba(255, 255, 255, 0.2);
+  border-radius: 8px;
+  padding: 8px 14px;
+  font-size: 13px;
+  font-weight: 600;
+  cursor: pointer;
+  box-shadow: 0 4px 12px rgba(43, 138, 62, 0.3);
+  transition: all 0.2s ease;
+}
+
+.btn-call-start:hover {
+  background: linear-gradient(135deg, #2f9e44, #2b8a3e);
+  transform: translateY(-1px);
+  box-shadow: 0 6px 16px rgba(43, 138, 62, 0.45);
+}
+
+/* Modal gọi đi (Calling Prompt) */
+.video-call-prompt-modal {
+  position: fixed;
+  inset: 0;
+  background: rgba(0, 0, 0, 0.7);
+  backdrop-filter: blur(6px);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 1000;
+}
+
+.call-prompt-card {
+  background: #181d28;
+  border: 1px solid rgba(255, 255, 255, 0.15);
+  border-radius: 16px;
+  padding: 30px;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  text-align: center;
+  gap: 12px;
+  max-width: 360px;
+  box-shadow: 0 12px 36px rgba(0, 0, 0, 0.6);
+}
+
+.calling-radar {
+  position: relative;
+  width: 70px;
+  height: 70px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  margin-bottom: 8px;
+}
+
+.calling-icon {
+  font-size: 32px;
+  z-index: 2;
+}
+
+.radar-ping {
+  position: absolute;
+  inset: 0;
+  border-radius: 50%;
+  border: 2px solid #38d9a9;
+  animation: ping 1.5s cubic-bezier(0, 0, 0.2, 1) infinite;
+}
+
+@keyframes ping {
+  75%, 100% {
+    transform: scale(1.8);
+    opacity: 0;
+  }
+}
+
+.btn-call-cancel {
+  margin-top: 10px;
+  background: #e03131;
+  color: #fff;
+  border: none;
+  border-radius: 8px;
+  padding: 8px 18px;
+  font-size: 13px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: all 0.2s ease;
+}
+
+.btn-call-cancel:hover {
+  background: #c92a2a;
+}
+
+/* Banner cuộc gọi đến (Incoming Call) */
+.video-call-incoming-banner {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  padding: 12px 18px;
+  background: linear-gradient(135deg, #182820, #0f1c15);
+  border: 1px solid rgba(56, 217, 169, 0.5);
+  border-radius: 12px;
+  margin: 10px 0;
+  box-shadow: 0 6px 20px rgba(0, 0, 0, 0.4);
+  animation: slide-down 0.3s ease;
+}
+
+@keyframes slide-down {
+  from {
+    transform: translateY(-12px);
+    opacity: 0;
+  }
+  to {
+    transform: translateY(0);
+    opacity: 1;
+  }
+}
+
+.incoming-left {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+
+.incoming-pulse-icon {
+  font-size: 24px;
+  animation: pulse 1s infinite;
+}
+
+@keyframes pulse {
+  0%, 100% { transform: scale(1); }
+  50% { transform: scale(1.15); }
+}
+
+.incoming-info {
+  display: flex;
+  flex-direction: column;
+}
+
+.incoming-info strong {
+  color: #38d9a9;
+  font-size: 14px;
+}
+
+.incoming-info span {
+  color: #c5d0de;
+  font-size: 12px;
+}
+
+.incoming-actions {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.btn-incoming-accept {
+  background: linear-gradient(135deg, #2b8a3e, #237032);
+  color: #fff;
+  border: none;
+  border-radius: 6px;
+  padding: 7px 14px;
+  font-size: 12px;
+  font-weight: 600;
+  cursor: pointer;
+}
+
+.btn-incoming-reject {
+  background: #c92a2a;
+  color: #fff;
+  border: none;
+  border-radius: 6px;
+  padding: 7px 14px;
+  font-size: 12px;
+  font-weight: 600;
+  cursor: pointer;
+}
+
+/* Khung hiển thị Video Call (CONNECTED) */
+.video-call-container {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  width: 100%;
+  max-width: 320px;
+  margin: 10px 0;
+}
+
+.remote-video-frame {
+  position: relative;
+  width: 100%;
+  height: 220px;
+  border-radius: 14px;
+  overflow: hidden;
+  background: #0d1017;
+  border: 2px solid rgba(255, 255, 255, 0.12);
+  box-shadow: 0 10px 30px rgba(0, 0, 0, 0.5);
+}
+
+.remote-video-element {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+
+.remote-avatar-fallback {
+  width: 100%;
+  height: 100%;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 10px;
+  background: linear-gradient(135deg, #1a202c, #0e121a);
+}
+
+.remote-avatar-circle {
+  width: 68px;
+  height: 68px;
+  border-radius: 50%;
+  background: linear-gradient(135deg, #2b8a3e, #1a5327);
+  color: #fff;
+  font-size: 26px;
+  font-weight: 700;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  box-shadow: 0 6px 18px rgba(43, 138, 62, 0.4);
+}
+
+.remote-status-tag {
+  font-size: 12px;
+  color: #a0aec0;
+  background: rgba(0, 0, 0, 0.6);
+  padding: 3px 10px;
+  border-radius: 8px;
+}
+
+.remote-badge-label {
+  position: absolute;
+  top: 10px;
+  left: 10px;
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  background: rgba(0, 0, 0, 0.65);
+  backdrop-filter: blur(4px);
+  color: #fff;
+  font-size: 11px;
+  font-weight: 600;
+  padding: 3px 8px;
+  border-radius: 6px;
+}
+
+.live-dot {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: #2b8a3e;
+  box-shadow: 0 0 6px #2b8a3e;
+}
+
+.pip-wrapper {
+  position: absolute;
+  bottom: 10px;
+  right: 10px;
+}
+
+/* Cụm điều khiển cuộc gọi (Call Controls Bar) */
+.call-controls-bar {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 10px;
+  background: rgba(24, 29, 40, 0.85);
+  backdrop-filter: blur(8px);
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  border-radius: 12px;
+  padding: 8px 14px;
+  box-shadow: 0 6px 16px rgba(0, 0, 0, 0.35);
+}
+
+.control-btn {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 3px;
+  background: rgba(255, 255, 255, 0.08);
+  border: 1px solid rgba(255, 255, 255, 0.15);
+  color: #fff;
+  border-radius: 8px;
+  padding: 8px 12px;
+  cursor: pointer;
+  transition: all 0.2s ease;
+  min-width: 65px;
+}
+
+.control-btn:hover {
+  background: rgba(255, 255, 255, 0.16);
+  transform: translateY(-1px);
+}
+
+.control-btn.is-muted,
+.control-btn.is-cam-off {
+  background: rgba(220, 63, 52, 0.25);
+  border-color: rgba(220, 63, 52, 0.6);
+  color: #ff8787;
+}
+
+.control-btn small {
+  font-size: 10px;
+  font-weight: 600;
+}
+
+.btn-leave-call {
+  background: linear-gradient(135deg, #e03131, #c92a2a);
+  border-color: rgba(255, 255, 255, 0.2);
+}
+
+.btn-leave-call:hover {
+  background: linear-gradient(135deg, #f03e3e, #d6336c);
+}
+
+/* Khung PiP cục bộ */
 .local-video-pip {
   position: relative;
-  width: 140px;
-  height: 105px;
-  border-radius: 12px;
+  width: 100px;
+  height: 75px;
+  border-radius: 10px;
   overflow: hidden;
   background: #11141b;
-  border: 2px solid rgba(255, 255, 255, 0.15);
-  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.45);
+  border: 2px solid rgba(255, 255, 255, 0.2);
+  box-shadow: 0 6px 18px rgba(0, 0, 0, 0.5);
   display: flex;
   align-items: center;
   justify-content: center;
@@ -18,14 +351,14 @@
 
 .local-video-pip:hover {
   border-color: rgba(220, 63, 52, 0.6);
-  transform: scale(1.02);
+  transform: scale(1.03);
 }
 
 .local-video-element {
   width: 100%;
   height: 100%;
   object-fit: cover;
-  transform: scaleX(-1); /* Gương phản chiếu tự nhiên cho người dùng */
+  transform: scaleX(-1);
 }
 
 .pip-avatar-fallback {
@@ -33,15 +366,15 @@
   flex-direction: column;
   align-items: center;
   justify-content: center;
-  gap: 6px;
+  gap: 4px;
   width: 100%;
   height: 100%;
   background: linear-gradient(135deg, #1b202c, #0d1017);
 }
 
 .pip-avatar-circle {
-  width: 44px;
-  height: 44px;
+  width: 32px;
+  height: 32px;
   border-radius: 50%;
   background: linear-gradient(135deg, #d33828, #972115);
   color: #fff;
@@ -49,8 +382,7 @@
   align-items: center;
   justify-content: center;
   font-weight: 700;
-  font-size: 18px;
-  box-shadow: 0 4px 12px rgba(211, 56, 40, 0.35);
+  font-size: 14px;
 }
 
 .avatar-pulse {
@@ -58,30 +390,24 @@
 }
 
 @keyframes mic-wave {
-  0% {
-    box-shadow: 0 0 0 0 rgba(211, 56, 40, 0.6);
-  }
-  70% {
-    box-shadow: 0 0 0 10px rgba(211, 56, 40, 0);
-  }
-  100% {
-    box-shadow: 0 0 0 0 rgba(211, 56, 40, 0);
-  }
+  0% { box-shadow: 0 0 0 0 rgba(211, 56, 40, 0.6); }
+  70% { box-shadow: 0 0 0 8px rgba(211, 56, 40, 0); }
+  100% { box-shadow: 0 0 0 0 rgba(211, 56, 40, 0); }
 }
 
 .pip-avatar-tag {
-  font-size: 11px;
+  font-size: 9px;
   color: #a0aec0;
   background: rgba(0, 0, 0, 0.5);
-  padding: 2px 8px;
-  border-radius: 6px;
+  padding: 1px 6px;
+  border-radius: 4px;
 }
 
 .pip-badges {
   position: absolute;
-  bottom: 6px;
-  left: 6px;
-  right: 6px;
+  bottom: 4px;
+  left: 4px;
+  right: 4px;
   display: flex;
   align-items: center;
   justify-content: space-between;
@@ -89,105 +415,21 @@
 }
 
 .pip-badge-user {
-  font-size: 10px;
+  font-size: 9px;
   font-weight: 600;
   color: #fff;
-  background: rgba(0, 0, 0, 0.65);
-  backdrop-filter: blur(4px);
-  padding: 2px 6px;
-  border-radius: 4px;
-  max-width: 85px;
+  background: rgba(0, 0, 0, 0.7);
+  padding: 1px 4px;
+  border-radius: 3px;
+  max-width: 60px;
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
 }
 
 .pip-badge-muted {
-  font-size: 11px;
+  font-size: 9px;
   background: rgba(220, 63, 52, 0.85);
-  padding: 2px 4px;
-  border-radius: 4px;
-}
-
-/* Lỗi quyền media */
-.local-media-error-card {
-  display: flex;
-  align-items: flex-start;
-  gap: 12px;
-  padding: 14px 16px;
-  background: rgba(30, 20, 22, 0.9);
-  border: 1px solid rgba(220, 63, 52, 0.4);
-  border-radius: 10px;
-  box-shadow: 0 6px 18px rgba(0, 0, 0, 0.35);
-  backdrop-filter: blur(8px);
-  max-width: 380px;
-  margin: 10px 0;
-}
-
-.media-error-icon {
-  font-size: 24px;
-  flex-shrink: 0;
-}
-
-.media-error-content {
-  display: flex;
-  flex-direction: column;
-  gap: 6px;
-}
-
-.media-error-title {
-  color: #ff6b6b;
-  font-size: 13px;
-  font-weight: 700;
-}
-
-.media-error-instructions {
-  color: #c5d0de;
-  font-size: 12px;
-  line-height: 1.4;
-  margin: 0;
-}
-
-.btn-retry-media {
-  align-self: flex-start;
-  margin-top: 4px;
-  padding: 6px 12px;
-  font-size: 12px;
-  font-weight: 600;
-  border-radius: 6px;
-  background: linear-gradient(135deg, #e03131, #c92a2a);
-  color: #fff;
-  border: none;
-  cursor: pointer;
-  transition: all 0.2s ease;
-}
-
-.btn-retry-media:hover {
-  background: linear-gradient(135deg, #f03e3e, #d6336c);
-  transform: translateY(-1px);
-}
-
-.requesting-media {
-  display: flex;
-  flex-direction: column;
-  gap: 8px;
-  color: #a0aec0;
-  font-size: 11px;
-  text-align: center;
-  padding: 10px;
-}
-
-.pip-spinner {
-  width: 20px;
-  height: 20px;
-  border: 2px solid rgba(255, 255, 255, 0.2);
-  border-top-color: #d33828;
-  border-radius: 50%;
-  animation: spin 0.8s linear infinite;
-}
-
-@keyframes spin {
-  to {
-    transform: rotate(360deg);
-  }
+  padding: 1px 3px;
+  border-radius: 3px;
 }

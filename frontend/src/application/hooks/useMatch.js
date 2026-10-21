@@ -65,6 +65,7 @@ export function useMatch(matchId) {
   });
   const socketRef = useRef(null);
   const pendingRef = useRef(false);
+  const signalingHandlerRef = useRef(null);
 
   // Lắng nghe thay đổi trạng thái từ ReconnectManager
   useEffect(() => {
@@ -211,6 +212,17 @@ export function useMatch(matchId) {
                 reason: message.reason || message.endReason,
                 message: message.message,
               });
+            } else if (
+              [
+                'CallIncoming', 'CallInitiated', 'CallAccepted',
+                'CallOffer', 'CallAnswer', 'CallCandidate',
+                'CallTimeout', 'CallRejected', 'CallEnded',
+              ].includes(message.type)
+            ) {
+              // COT-629: Chuyển tiếp các gói tin Signaling cho WebRTC Video Call
+              if (typeof signalingHandlerRef.current === 'function') {
+                signalingHandlerRef.current(message);
+              }
             } else if (message.type === 'moveResult') {
               pendingRef.current = false;
               setState((current) => {
@@ -331,10 +343,24 @@ export function useMatch(matchId) {
     return reconnectManager.handleServerMatchResult(result);
   }, [reconnectManager]);
 
+  const sendSignaling = useCallback((payload) => {
+    const socket = socketRef.current;
+    if (!socket || socket.readyState !== WebSocket.OPEN) return false;
+    socket.send(JSON.stringify(payload));
+    return true;
+  }, []);
+
+  const setSignalingHandler = useCallback((handler) => {
+    signalingHandlerRef.current = handler;
+  }, []);
+
   return {
     ...state,
+    socketRef,
     sendMove,
     clearMoveError,
+    sendSignaling,
+    setSignalingHandler,
     reconnectState,
     reconnectManager,
     simulateSelfDisconnect,
