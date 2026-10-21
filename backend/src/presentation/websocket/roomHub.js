@@ -255,6 +255,21 @@ class RoomHub {
     const roleInfo = room.getParticipantRole(meta.userId);
     const isSpectator = !roleInfo || roleInfo.role === 'SPECTATOR';
 
+    const videoCallActions = [
+      'call:request', 'call:start', 'call:accept', 'call:reject',
+      'call:offer', 'webrtc:offer', 'call:answer', 'webrtc:answer',
+      'call:candidate', 'webrtc:candidate', 'call:end', 'call:leave',
+    ];
+
+    if (isSpectator && videoCallActions.includes(type)) {
+      this.send(socket, {
+        type: 'error',
+        code: 'FORBIDDEN',
+        message: 'Khán giả không được bắt đầu, không được tham gia và không được xem cuộc gọi.',
+      });
+      return;
+    }
+
     if (isSpectator && ['ready', 'start', 'demote', 'kick', 'move'].includes(type)) {
       this.send(socket, {
         type: 'error',
@@ -439,7 +454,197 @@ class RoomHub {
       return;
     }
 
-    // 7. Rời phòng (leave)
+    // 7. WebRTC Signaling Server cho Video Call giữa Chủ Room và Đối thủ (COT-624, COT-626)
+    if (type === 'call:request' || type === 'call:start') {
+      try {
+        const initResult = room.initiateVideoCall(meta.userId);
+        const timeoutSeconds = 60;
+
+        // Bộ đếm thời gian 60s: Hết hạn yêu cầu cuộc gọi nếu không phản hồi
+        room.videoCall.timeoutTimer = setTimeout(() => {
+          if (room.videoCall && room.videoCall.callId === initResult.callId && room.videoCall.status === 'RINGING') {
+            room.videoCall = null;
+            const timeoutMsg = {
+              type: 'CallTimeout',
+              callId: initResult.callId,
+              reason: 'TIMEOUT',
+              message: 'Yêu cầu cuộc gọi đã hết hạn sau 60 giây không phản hồi.',
+              roomCode: room.code,
+            };
+            this.sendToUserInRoom(room.code, initResult.callerId, timeoutMsg);
+            this.sendToUserInRoom(room.code, initResult.calleeId, timeoutMsg);
+          }
+        }, timeoutSeconds * 1000);
+
+        if (room.videoCall.timeoutTimer.unref) {
+          room.videoCall.timeoutTimer.unref();
+        }
+
+        // Báo cho Callee có cuộc gọi đến
+        this.sendToUserInRoom(room.code, initResult.calleeId, {
+          type: 'CallIncoming',
+          callId: initResult.callId,
+          callerId: initResult.callerId,
+          callerName: meta.user?.displayName || meta.user?.username || 'Đối thủ',
+          callerSide: initResult.callerSide,
+          timeoutSeconds,
+          roomCode: room.code,
+        });
+
+        // Báo cho Caller rằng cuộc gọi đã được khởi tạo
+        this.send(socket, {
+          type: 'CallInitiated',
+          callId: initResult.callId,
+          calleeId: initResult.calleeId,
+          calleeName: initResult.opponent.displayName || initResult.opponent.username || 'Đối thủ',
+          timeoutSeconds,
+          roomCode: room.code,
+        });
+      } catch (err) {
+        this.send(socket, {
+          type: 'error',
+          code: err.code || 'CALL_REQUEST_ERROR',
+          message: err.message,
+        });
+      }
+      return;
+    }
+
+    if (type === 'call:accept') {
+      try {
+        const acceptResult = room.acceptVideoCall(meta.userId);
+        const acceptedMsg = {
+          type: 'CallAccepted',
+          callId: acceptResult.callId,
+          callerId: acceptResult.callerId,
+          calleeId: acceptResult.calleeId,
+          roomCode: room.code,
+        };
+        this.sendToUserInRoom(room.code, acceptResult.callerId, acceptedMsg);
+        this.sendToUserInRoom(room.code, acceptResult.calleeId, acceptedMsg);
+      } catch (err) {
+        this.send(socket, {
+          type: 'error',
+          code: err.code || 'CALL_ACCEPT_ERROR',
+          message: err.message,
+        });
+      }
+      return;
+    }
+
+    if (type === 'call:reject') {
+      try {
+        const rejectResult = room.rejectVideoCall(meta.userId, payload.reason);
+        const rejectedMsg = {
+          type: 'CallRejected',
+          callId: rejectResult.callId,
+          reason: rejectResult.reason,
+          message: rejectResult.cancelledByCaller
+            ? 'Người gọi đã hủy yêu cầu cuộc gọi.'
+            : 'Đối thủ đã từ chối cuộc gọi.',
+          roomCode: room.code,
+        };
+        this.sendToUserInRoom(room.code, rejectResult.callerId, rejectedMsg);
+        this.sendToUserInRoom(room.code, rejectResult.calleeId, rejectedMsg);
+      } catch (err) {
+        this.send(socket, {
+          type: 'error',
+          code: err.code || 'CALL_REJECT_ERROR',
+          message: err.message,
+        });
+      }
+      return;
+    }
+
+    if (type === 'call:offer' || type === 'webrtc:offer') {
+      if (!room.videoCall || !['RINGING', 'CONNECTED'].includes(room.videoCall.status)) {
+        this.send(socket, {
+          type: 'error',
+          code: 'CALL_NOT_ACTIVE',
+          message: 'Không có phiên cuộc gọi đang hoạt động để gửi SDP Offer.',
+        });
+        return;
+      }
+
+      const targetId = Number(meta.userId) === Number(room.videoCall.callerId)
+        ? room.videoCall.calleeId
+        : room.videoCall.callerId;
+
+      this.sendToUserInRoom(room.code, targetId, {
+        type: 'CallOffer',
+        callId: room.videoCall.callId,
+        fromUserId: meta.userId,
+        sdp: payload.sdp || payload.offer,
+        roomCode: room.code,
+      });
+      return;
+    }
+
+    if (type === 'call:answer' || type === 'webrtc:answer') {
+      if (!room.videoCall || !['RINGING', 'CONNECTED'].includes(room.videoCall.status)) {
+        this.send(socket, {
+          type: 'error',
+          code: 'CALL_NOT_ACTIVE',
+          message: 'Không có phiên cuộc gọi đang hoạt động để gửi SDP Answer.',
+        });
+        return;
+      }
+
+      const targetId = Number(meta.userId) === Number(room.videoCall.callerId)
+        ? room.videoCall.calleeId
+        : room.videoCall.callerId;
+
+      this.sendToUserInRoom(room.code, targetId, {
+        type: 'CallAnswer',
+        callId: room.videoCall.callId,
+        fromUserId: meta.userId,
+        sdp: payload.sdp || payload.answer,
+        roomCode: room.code,
+      });
+      return;
+    }
+
+    if (type === 'call:candidate' || type === 'webrtc:candidate') {
+      if (!room.videoCall || !['RINGING', 'CONNECTED'].includes(room.videoCall.status)) {
+        this.send(socket, {
+          type: 'error',
+          code: 'CALL_NOT_ACTIVE',
+          message: 'Không có phiên cuộc gọi đang hoạt động để gửi ICE Candidate.',
+        });
+        return;
+      }
+
+      const targetId = Number(meta.userId) === Number(room.videoCall.callerId)
+        ? room.videoCall.calleeId
+        : room.videoCall.callerId;
+
+      this.sendToUserInRoom(room.code, targetId, {
+        type: 'CallCandidate',
+        callId: room.videoCall.callId,
+        fromUserId: meta.userId,
+        candidate: payload.candidate,
+        roomCode: room.code,
+      });
+      return;
+    }
+
+    if (type === 'call:end' || type === 'call:leave') {
+      const endResult = room.endVideoCall(meta.userId, payload.reason || 'USER_HANGUP');
+      if (endResult) {
+        const endedMsg = {
+          type: 'CallEnded',
+          callId: endResult.callId,
+          endedBy: endResult.endedBy,
+          reason: endResult.reason,
+          roomCode: room.code,
+        };
+        this.sendToUserInRoom(room.code, endResult.callerId, endedMsg);
+        this.sendToUserInRoom(room.code, endResult.calleeId, endedMsg);
+      }
+      return;
+    }
+
+    // 8. Rời phòng (leave)
     if (type === 'leave') {
       socket.close(1000, 'User left');
       return;
@@ -481,6 +686,26 @@ class RoomHub {
     }
 
     try {
+      // Dọn dẹp Video Call WebRTC nếu người ngắt kết nối đang trong cuộc gọi (COT-624, COT-626)
+      if (room && room.videoCall) {
+        const callerId = room.videoCall.callerId;
+        const calleeId = room.videoCall.calleeId;
+        if (Number(callerId) === meta.userId || Number(calleeId) === meta.userId) {
+          const peerId = Number(callerId) === meta.userId ? calleeId : callerId;
+          const endResult = room.endVideoCall(meta.userId, 'PEER_DISCONNECTED');
+          if (endResult) {
+            this.sendToUserInRoom(room.code, peerId, {
+              type: 'CallEnded',
+              callId: endResult.callId,
+              endedBy: meta.userId,
+              reason: 'PEER_DISCONNECTED',
+              message: 'Đối thủ đã mất kết nối hoặc rời cuộc gọi.',
+              roomCode: room.code,
+            });
+          }
+        }
+      }
+
       // 1. Nếu ván đấu đang diễn ra và người ngắt kết nối là Người chơi (PLAYER) (COT-593)
       if (room.status === 'PLAYING' && meta.role === 'PLAYER') {
         const pauseResult = room.pauseMatchForDisconnect(meta.userId, this.reconnectCountdownSeconds);
@@ -782,6 +1007,18 @@ class RoomHub {
     for (const client of group) {
       if (client.readyState === 1) { // WebSocket.OPEN
         client.send(raw);
+      }
+    }
+  }
+
+  sendToUserInRoom(roomCode, userId, message) {
+    const raw = JSON.stringify(message);
+    const targetSockets = this.userSockets.get(Number(userId));
+    if (!targetSockets) return;
+    for (const socket of targetSockets) {
+      const meta = this.clients.get(socket);
+      if (meta && meta.roomCode === roomCode && socket.readyState === 1) {
+        socket.send(raw);
       }
     }
   }
