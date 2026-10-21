@@ -8,14 +8,32 @@ class CreateRoomUseCase {
   } = {}) {
     this.roomManager = roomManager;
     this.userRepository = userRepository;
+    this.recentRequests = new Map(); // key -> { timestamp, result }
   }
 
-  async execute(userId, { name, isPrivate = false, maxSpectators = 10, baseUrl = '' } = {}) {
+  async execute(userId, { name, isPrivate = false, maxSpectators = 10, baseUrl = '', requestId = null } = {}) {
     if (!userId) {
       const err = new Error('Yêu cầu đăng nhập để tạo phòng.');
       err.code = 'UNAUTHORIZED';
       err.statusCode = 401;
       throw err;
+    }
+
+    if (!name || typeof name !== 'string' || !name.trim()) {
+      const err = new Error('Tên phòng là bắt buộc và không được để trống.');
+      err.code = 'INVALID_ROOM_NAME';
+      err.statusCode = 400;
+      throw err;
+    }
+
+    // Chống request tạo Room lặp: Bấm nhiều lần chỉ sinh một phòng duy nhất
+    const now = Date.now();
+    const idempotencyKey = requestId || `${userId}:${name.trim()}:${Boolean(isPrivate)}`;
+    if (this.recentRequests.has(idempotencyKey)) {
+      const cached = this.recentRequests.get(idempotencyKey);
+      if (now - cached.timestamp < 3000) {
+        return cached.result;
+      }
     }
 
     const hostUser = await this.userRepository.findById(userId);
@@ -28,17 +46,20 @@ class CreateRoomUseCase {
 
     const room = this.roomManager.createRoom({
       hostUser,
-      name,
-      isPrivate,
+      name: name.trim(),
+      isPrivate: Boolean(isPrivate),
       maxSpectators,
     });
 
-    return {
+    const result = {
       success: true,
       message: 'Tạo phòng cờ thành công.',
       room: room.getSummary(baseUrl),
       inviteLink: room.getDeepLink(baseUrl),
     };
+
+    this.recentRequests.set(idempotencyKey, { timestamp: now, result });
+    return result;
   }
 }
 
