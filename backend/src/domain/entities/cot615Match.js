@@ -136,4 +136,11 @@ function applyMatchMove(match, color, from, to, now = Date.now()) {
   };
 }
 
-module.exports = { applyMatchMove, createCot615Match, getPublicMatchState };
+function createInitialArmy() {
+  return [
+    ...createArmy('red', 0, 2, 3),
+    ...createArmy('black', 9, 7, 6),
+  ];
+}
+
+module.exports = { applyMatchMove, createCot615Match, getPublicMatchState, createArmy, createInitialArmy };

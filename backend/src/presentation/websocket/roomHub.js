@@ -289,6 +289,52 @@ class RoomHub {
       return;
     }
 
+    // 3.5. Nước đi cờ của người chơi (move)
+    if (type === 'move') {
+      if (room.status !== 'PLAYING' || !room.matchState) {
+        this.send(socket, { type: 'error', code: 'GAME_NOT_PLAYING', message: 'Trận đấu chưa bắt đầu hoặc đã kết thúc.' });
+        return;
+      }
+
+      if (room.reconnectState || room.matchState.isPaused) {
+        this.send(socket, {
+          type: 'error',
+          code: 'MATCH_PAUSED',
+          message: 'Ván đấu đang tạm dừng chờ đối thủ kết nối lại.',
+        });
+        return;
+      }
+
+      const playerColor = roleInfo.side ? roleInfo.side.toLowerCase() : null;
+      if (playerColor !== room.matchState.currentTurn) {
+        this.send(socket, {
+          type: 'error',
+          code: 'NOT_YOUR_TURN',
+          message: 'Chưa tới lượt đi của bạn.',
+        });
+        return;
+      }
+
+      const moveResult = room.applyMove(playerColor, payload.from, payload.to);
+      if (!moveResult.accepted) {
+        this.send(socket, {
+          type: 'error',
+          code: 'INVALID_MOVE',
+          message: moveResult.error || 'Nước đi không hợp lệ.',
+        });
+        return;
+      }
+
+      this.broadcastToRoom(room.code, {
+        type: 'moveResult',
+        move: { from: payload.from, to: payload.to, color: playerColor, captured: moveResult.captured },
+        state: room.getSnapshot(),
+        snapshot: room.getSnapshot(),
+        accepted: true,
+      });
+      return;
+    }
+
     // 4. Chủ phòng chuyển đổi Đối thủ xuống Khán giả (demote)
     if (type === 'demote') {
       try {
