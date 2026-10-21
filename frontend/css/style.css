@@ -2682,3 +2682,236 @@ body {
   align-items: center;
   gap: 12px;
 }
+
+/* ==========================================================================
+   COT-579, COT-580 & COT-585: Auth, OAuth & Profile Styles
+   ========================================================================== */
+
+.auth-general-error {
+  background: rgba(239, 68, 68, 0.12);
+  border: 1px solid rgba(239, 68, 68, 0.35);
+  color: #fca5a5;
+  padding: 10px 14px;
+  border-radius: var(--radius-sm);
+  font-size: 13px;
+  margin-bottom: 14px;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.auth-switch-box {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  font-size: 13px;
+  color: var(--text-muted);
+  margin-top: 10px;
+  padding-top: 8px;
+}
+
+.btn-link-action {
+  background: none;
+  border: none;
+  color: var(--gold-primary);
+  font-weight: 600;
+  cursor: pointer;
+  padding: 2px 6px;
+  border-radius: 4px;
+  font-size: 13px;
+  transition: var(--transition);
+}
+
+.btn-link-action:hover {
+  color: #ffe082;
+  text-decoration: underline;
+}
+
+/* COT-580: OAuth Section & Buttons */
+.oauth-section {
+  margin-top: 18px;
+  padding-top: 14px;
+}
+
+.oauth-divider {
+  display: flex;
+  align-items: center;
+  text-align: center;
+  margin-bottom: 14px;
+}
+
+.oauth-divider::before,
+.oauth-divider::after {
+  content: '';
+  flex: 1;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.12);
+}
+
+.oauth-divider span {
+  padding: 0 12px;
+  font-size: 12px;
+  color: var(--text-muted);
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+}
+
+.oauth-buttons-grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 10px;
+}
+
+@media (max-width: 480px) {
+  .oauth-buttons-grid {
+    grid-template-columns: 1fr;
+  }
+}
+
+.btn-oauth {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 10px;
+  padding: 10px 14px;
+  border-radius: var(--radius-sm);
+  font-size: 13px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: all 0.25s ease;
+  border: 1px solid transparent;
+  outline: none;
+}
+
+.btn-google {
+  background: #ffffff;
+  color: #1f1f1f;
+  border-color: #dadce0;
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.15);
+}
+
+.btn-google:hover {
+  background: #f8f9fa;
+  box-shadow: 0 3px 8px rgba(0, 0, 0, 0.25);
+  transform: translateY(-1px);
+}
+
+.btn-facebook {
+  background: #1877f2;
+  color: #ffffff;
+  border-color: #1877f2;
+  box-shadow: 0 1px 3px rgba(24, 119, 242, 0.25);
+}
+
+.btn-facebook:hover {
+  background: #166fe5;
+  box-shadow: 0 3px 8px rgba(24, 119, 242, 0.4);
+  transform: translateY(-1px);
+}
+
+.oauth-icon {
+  flex-shrink: 0;
+}
+
+/* COT-585: Profile & Avatar Modal Styles */
+.modal-card-profile {
+  max-width: 480px;
+  width: 95%;
+  background: var(--bg-card);
+  border: 1px solid var(--border-gold);
+  border-radius: var(--radius-md);
+  box-shadow: 0 20px 40px rgba(0, 0, 0, 0.7);
+}
+
+.avatar-edit-section {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  margin-bottom: 20px;
+}
+
+.avatar-preview-wrapper {
+  display: flex;
+  align-items: center;
+  gap: 18px;
+}
+
+.avatar-preview-box {
+  width: 88px;
+  height: 88px;
+  border-radius: 50%;
+  border: 3px solid var(--gold-primary);
+  background: rgba(223, 177, 91, 0.15);
+  box-shadow: 0 4px 14px rgba(223, 177, 91, 0.3);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  overflow: hidden;
+  position: relative;
+}
+
+.avatar-fallback-text {
+  font-size: 38px;
+  font-weight: 700;
+  color: var(--gold-primary);
+  font-family: 'Cinzel', serif;
+}
+
+.avatar-preview-img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+
+.avatar-upload-action {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.avatar-size-note {
+  font-size: 11px;
+  color: var(--text-muted);
+}
+
+.form-row-grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 12px;
+}
+
+@media (max-width: 480px) {
+  .form-row-grid {
+    grid-template-columns: 1fr;
+  }
+}
+
+.input-readonly {
+  background: rgba(255, 255, 255, 0.04) !important;
+  color: var(--text-muted) !important;
+  cursor: not-allowed !important;
+  border-color: rgba(255, 255, 255, 0.08) !important;
+}
+
+.profile-elo-pill {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  background: rgba(223, 177, 91, 0.12);
+  border: 1px solid rgba(223, 177, 91, 0.3);
+  color: var(--gold-primary);
+  padding: 8px 16px;
+  border-radius: var(--radius-sm);
+  font-weight: 700;
+  font-size: 14px;
+}
+
+.checklist-item.is-valid {
+  color: #4ade80 !important;
+  font-weight: 500;
+}
+
+.checklist-item.is-valid .chk-icon {
+  color: #4ade80 !important;
+}
+
