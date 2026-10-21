@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { fetchMatch, matchWebSocketUrl } from '../../infrastructure/api/matchApi';
 import { ReconnectManager } from '../../domain/network/reconnectManager';
+import { BoardSyncManager } from '../../domain/game/boardSyncManager';
 
 function isMatchColor(color) {
   return color === 'red' || color === 'black';
@@ -131,7 +132,34 @@ export function useMatch(matchId) {
           if (cancelled) return;
           try {
             const message = JSON.parse(event.data);
-            if (message.type === 'welcome' || message.type === 'state') {
+            if (message.type === 'reconnectState') {
+              // COT-602: Khôi phục toàn diện bàn cờ, quân bị ăn, đồng hồ, lượt đi và trạng thái chiếu từ snapshot máy chủ
+              reconnectManager.handleSelfReconnect();
+              setState((current) => {
+                const restoredMatch = BoardSyncManager.restoreFromSnapshot(
+                  message.snapshot || message.state,
+                  current.match,
+                );
+                const assignedColor = message.side
+                  ? message.side.toLowerCase()
+                  : message.role === 'host'
+                    ? 'red'
+                    : message.role === 'guest'
+                      ? 'black'
+                      : current.color;
+                const readOnly = message.role === 'spectator' ||
+                  (message.readOnly !== undefined ? message.readOnly : current.readOnly);
+                return {
+                  ...current,
+                  match: withCheckStatus(restoredMatch, message, current.match),
+                  color: assignedColor || current.color,
+                  readOnly,
+                  loading: false,
+                  connected: true,
+                  error: null,
+                };
+              });
+            } else if (message.type === 'welcome' || message.type === 'state') {
               setState((current) => ({
                 ...current,
                 match: withCheckStatus(message.state, message, current.match),
@@ -158,10 +186,23 @@ export function useMatch(matchId) {
               });
             } else if (
               message.type === 'opponentReconnected' ||
-              message.type === 'match:opponentReconnected'
+              message.type === 'match:opponentReconnected' ||
+              message.type === 'PlayerReconnected'
             ) {
-              // COT-601: Đối thủ kết nối lại kịp thời -> tắt banner & tiếp tục ván đấu
+              // COT-601 & COT-602: Đối thủ kết nối lại kịp thời -> tắt banner, khôi phục bàn cờ & tiếp tục ván đấu
               reconnectManager.handleOpponentReconnect();
+              if (message.snapshot || message.state) {
+                setState((current) => {
+                  const restoredMatch = BoardSyncManager.restoreFromSnapshot(
+                    message.snapshot || message.state,
+                    current.match,
+                  );
+                  return {
+                    ...current,
+                    match: withCheckStatus(restoredMatch, message, current.match),
+                  };
+                });
+              }
             } else if (message.type === 'matchEnded' || message.type === 'match:ended') {
               // COT-601: Máy chủ chốt kết quả kết thúc trận
               reconnectManager.handleServerMatchResult({

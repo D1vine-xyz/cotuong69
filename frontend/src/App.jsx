@@ -172,6 +172,19 @@ function App() {
     previousBoardRef.current = match.board;
   }, [lastMove, lastMoveKey, match, soundEnabled]);
 
+  useEffect(() => {
+    if (match?.capturedPieces) {
+      setCapturedPieces((current) => {
+        const redFromMatch = Array.isArray(match.capturedPieces.red) ? match.capturedPieces.red : [];
+        const blackFromMatch = Array.isArray(match.capturedPieces.black) ? match.capturedPieces.black : [];
+        if (redFromMatch.length > 0 || blackFromMatch.length > 0) {
+          return { red: redFromMatch, black: blackFromMatch };
+        }
+        return current;
+      });
+    }
+  }, [match?.capturedPieces]);
+
   useEffect(() => () => window.clearTimeout(captureEffectTimeoutRef.current), []);
 
   useEffect(() => {
