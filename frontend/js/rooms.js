@@ -141,7 +141,74 @@ document.addEventListener('DOMContentLoaded', () => {
   const resetBtnText = document.getElementById('resetBtnText');
   const chkLength = document.getElementById('chkLength');
   const chkAlphaNum = document.getElementById('chkAlphaNum');
-  const chkMatch = document.getElementById('chkMatch');
+  // COT-579: Register Modal DOM Elements
+  const registerModal = document.getElementById('registerModal');
+  const closeRegisterModalBtn = document.getElementById('closeRegisterModalBtn');
+  const openRegisterFromLoginLink = document.getElementById('openRegisterFromLoginLink');
+  const openLoginFromRegisterLink = document.getElementById('openLoginFromRegisterLink');
+  const registerForm = document.getElementById('registerForm');
+  const registerUsernameInput = document.getElementById('registerUsernameInput');
+  const registerDisplayNameInput = document.getElementById('registerDisplayNameInput');
+  const registerEmailInput = document.getElementById('registerEmailInput');
+  const registerPasswordInput = document.getElementById('registerPasswordInput');
+  const registerConfirmPasswordInput = document.getElementById('registerConfirmPasswordInput');
+  const registerUsernameError = document.getElementById('registerUsernameError');
+  const registerDisplayNameError = document.getElementById('registerDisplayNameError');
+  const registerEmailError = document.getElementById('registerEmailError');
+  const registerPasswordError = document.getElementById('registerPasswordError');
+  const registerConfirmPasswordError = document.getElementById('registerConfirmPasswordError');
+  const registerSuccessBanner = document.getElementById('registerSuccessBanner');
+  const registerSuccessMsg = document.getElementById('registerSuccessMsg');
+  const registerInputsArea = document.getElementById('registerInputsArea');
+  const submitRegisterBtn = document.getElementById('submitRegisterBtn');
+  const registerSpinner = document.getElementById('registerSpinner');
+  const registerBtnText = document.getElementById('registerBtnText');
+  const regChkLength = document.getElementById('regChkLength');
+  const regChkAlphaNum = document.getElementById('regChkAlphaNum');
+  const regChkMatch = document.getElementById('regChkMatch');
+
+  // COT-580: OAuth Buttons & Errors
+  const googleLoginBtn = document.getElementById('googleLoginBtn');
+  const facebookLoginBtn = document.getElementById('facebookLoginBtn');
+  const oauthGeneralError = document.getElementById('oauthGeneralError');
+  const loginGeneralError = document.getElementById('loginGeneralError');
+
+  // COT-585: Profile Modal DOM Elements
+  const profileModal = document.getElementById('profileModal');
+  const closeProfileModalBtn = document.getElementById('closeProfileModalBtn');
+  const cancelProfileBtn = document.getElementById('cancelProfileBtn');
+  const profileForm = document.getElementById('profileForm');
+  const profileUsernameInput = document.getElementById('profileUsernameInput');
+  const profileDisplayNameInput = document.getElementById('profileDisplayNameInput');
+  const profileEmailInput = document.getElementById('profileEmailInput');
+  const profileEloDisplay = document.getElementById('profileEloDisplay');
+  const profileAvatarInput = document.getElementById('profileAvatarInput');
+  const chooseAvatarBtn = document.getElementById('chooseAvatarBtn');
+  const profileAvatarImg = document.getElementById('profileAvatarImg');
+  const profileAvatarFallback = document.getElementById('profileAvatarFallback');
+  const profileDisplayNameError = document.getElementById('profileDisplayNameError');
+  const profileAvatarError = document.getElementById('profileAvatarError');
+  const profileSuccessBanner = document.getElementById('profileSuccessBanner');
+  const submitProfileBtn = document.getElementById('submitProfileBtn');
+  const profileSpinner = document.getElementById('profileSpinner');
+  const profileBtnText = document.getElementById('profileBtnText');
+  let selectedAvatarFile = null;
+  let selectedAvatarPreviewUrl = null;
+
+  // Khởi tạo các Service
+  const authService = typeof window !== 'undefined' && window.AuthService ? new window.AuthService({
+    onAuthStateChanged: (user) => {
+      apiService.setCurrentUser(user);
+      updateUserAuthUi();
+    }
+  }) : null;
+
+  const userProfileService = typeof window !== 'undefined' && window.UserProfileService ? new window.UserProfileService({
+    onProfileUpdated: (updatedUser) => {
+      apiService.setCurrentUser(updatedUser);
+      updateUserAuthUi();
+    }
+  }) : null;
 
   const passwordResetService = typeof window !== 'undefined' && window.PasswordResetService ? new window.PasswordResetService() : null;
 
@@ -177,6 +244,14 @@ document.addEventListener('DOMContentLoaded', () => {
    */
   async function init() {
     setupEventListeners();
+    if (authService) {
+      try {
+        const sessionRes = await authService.restoreSession();
+        if (sessionRes && sessionRes.isAuthenticated && sessionRes.user) {
+          apiService.setCurrentUser(sessionRes.user);
+        }
+      } catch {}
+    }
     updateUserAuthUi();
     await loadRooms();
     setupRealtimeSubscription();
@@ -387,6 +462,72 @@ document.addEventListener('DOMContentLoaded', () => {
     }
     if (loginForm) {
       loginForm.addEventListener('submit', handleLoginSubmit);
+    }
+
+    // COT-579: Chuyển đổi giữa Đăng nhập và Đăng ký
+    if (openRegisterFromLoginLink) {
+      openRegisterFromLoginLink.addEventListener('click', () => {
+        closeLoginModal();
+        openRegisterModal();
+      });
+    }
+    if (openLoginFromRegisterLink) {
+      openLoginFromRegisterLink.addEventListener('click', () => {
+        closeRegisterModal();
+        openLoginModal();
+      });
+    }
+    if (closeRegisterModalBtn) {
+      closeRegisterModalBtn.addEventListener('click', closeRegisterModal);
+    }
+    if (registerModal) {
+      registerModal.addEventListener('click', (e) => {
+        if (e.target === registerModal) closeRegisterModal();
+      });
+    }
+    if (registerForm) {
+      registerForm.addEventListener('submit', handleRegisterSubmit);
+    }
+    if (registerPasswordInput && registerConfirmPasswordInput) {
+      registerPasswordInput.addEventListener('input', updateRegisterChecklist);
+      registerConfirmPasswordInput.addEventListener('input', updateRegisterChecklist);
+    }
+
+    // COT-580: Sự kiện nút Đăng nhập nhanh Google & Facebook (OAuth2)
+    if (googleLoginBtn) {
+      googleLoginBtn.addEventListener('click', () => handleOAuthLogin('google'));
+    }
+    if (facebookLoginBtn) {
+      facebookLoginBtn.addEventListener('click', () => handleOAuthLogin('facebook'));
+    }
+
+    // COT-585: Sự kiện Hồ sơ cá nhân & Đổi Avatar
+    if (userProfileBar) {
+      userProfileBar.style.cursor = 'pointer';
+      userProfileBar.addEventListener('click', (e) => {
+        if (e.target === headerLogoutBtn || e.target.closest('#headerLogoutBtn')) return;
+        openProfileModal();
+      });
+    }
+    if (closeProfileModalBtn) {
+      closeProfileModalBtn.addEventListener('click', closeProfileModal);
+    }
+    if (cancelProfileBtn) {
+      cancelProfileBtn.addEventListener('click', closeProfileModal);
+    }
+    if (profileModal) {
+      profileModal.addEventListener('click', (e) => {
+        if (e.target === profileModal) closeProfileModal();
+      });
+    }
+    if (chooseAvatarBtn && profileAvatarInput) {
+      chooseAvatarBtn.addEventListener('click', () => profileAvatarInput.click());
+    }
+    if (profileAvatarInput) {
+      profileAvatarInput.addEventListener('change', handleAvatarFileSelect);
+    }
+    if (profileForm) {
+      profileForm.addEventListener('submit', handleProfileSubmit);
     }
 
     // COT-583: Sự kiện Quên mật khẩu & Đặt lại mật khẩu
@@ -1495,18 +1636,28 @@ document.addEventListener('DOMContentLoaded', () => {
       const eloEl = document.getElementById('currentUserElo');
       const avatarEl = document.getElementById('currentUserAvatar');
       if (nameEl) nameEl.textContent = user.displayName || user.username || 'Kỳ Thủ';
-      if (eloEl) eloEl.textContent = Number.isFinite(user.elo) ? user.elo : 1000;
-      if (avatarEl) avatarEl.textContent = user.avatar || (user.displayName ? user.displayName.charAt(0).toUpperCase() : '桑');
+      if (eloEl) eloEl.textContent = Number.isFinite(user.elo) ? user.elo : (user.eloRating || 1000);
+      if (avatarEl) {
+        if (user.avatarUrl && (user.avatarUrl.startsWith('data:') || user.avatarUrl.startsWith('http') || user.avatarUrl.startsWith('/'))) {
+          avatarEl.innerHTML = `<img src="${escapeHtml(user.avatarUrl)}" alt="Avatar" style="width: 100%; height: 100%; border-radius: 50%; object-fit: cover;">`;
+        } else {
+          avatarEl.textContent = user.avatar || (user.displayName ? user.displayName.charAt(0).toUpperCase() : '棋');
+        }
+      }
     } else {
       if (userProfileBar) userProfileBar.style.display = 'none';
       if (openLoginModalBtn) openLoginModalBtn.style.display = 'inline-flex';
     }
   }
 
-  function handleLogout() {
+  async function handleLogout() {
+    if (authService) {
+      await authService.logout();
+    }
     apiService.setCurrentUser(null);
     updateUserAuthUi();
     showToast('Đã đăng xuất tài khoản. Bạn đang ở chế độ khách.', 'info');
+    openLoginModal();
   }
 
   function openLoginModal(pendingRoomCode = null) {
@@ -1525,6 +1676,7 @@ document.addEventListener('DOMContentLoaded', () => {
     }
     clearLoginErrors();
     loginModal.style.display = 'flex';
+    loginUsernameInput?.focus();
   }
 
   function closeLoginModal() {
@@ -1541,6 +1693,14 @@ document.addEventListener('DOMContentLoaded', () => {
       loginPasswordError.textContent = '';
       loginPasswordError.style.display = 'none';
     }
+    if (loginGeneralError) {
+      loginGeneralError.textContent = '';
+      loginGeneralError.style.display = 'none';
+    }
+    if (oauthGeneralError) {
+      oauthGeneralError.textContent = '';
+      oauthGeneralError.style.display = 'none';
+    }
     loginUsernameInput?.classList.remove('input-error');
     loginPasswordInput?.classList.remove('input-error');
   }
@@ -1552,66 +1712,433 @@ document.addEventListener('DOMContentLoaded', () => {
     const username = loginUsernameInput ? loginUsernameInput.value.trim() : '';
     const password = loginPasswordInput ? loginPasswordInput.value.trim() : '';
 
-    if (!username) {
-      if (loginUsernameError) {
-        loginUsernameError.textContent = 'Vui lòng nhập tên đăng nhập hoặc email.';
+    const validation = typeof window.validateLoginForm === 'function'
+      ? window.validateLoginForm({ username, password })
+      : { isValid: Boolean(username && password), errors: {} };
+
+    if (!validation.isValid) {
+      if (validation.errors.username && loginUsernameError) {
+        loginUsernameError.textContent = validation.errors.username.error;
         loginUsernameError.style.display = 'block';
+        loginUsernameInput?.classList.add('input-error');
       }
-      loginUsernameInput?.classList.add('input-error');
-      loginUsernameInput?.focus();
-      return;
-    }
-
-    if (!password) {
-      if (loginPasswordError) {
-        loginPasswordError.textContent = 'Vui lòng nhập mật khẩu.';
+      if (validation.errors.password && loginPasswordError) {
+        loginPasswordError.textContent = validation.errors.password.error;
         loginPasswordError.style.display = 'block';
+        loginPasswordInput?.classList.add('input-error');
       }
-      loginPasswordInput?.classList.add('input-error');
-      loginPasswordInput?.focus();
       return;
     }
 
-    // Hiển thị trạng thái đang xử lý
+    // Hiển thị trạng thái đang xử lý và khóa nút (COT-579 AC 3)
     if (submitLoginBtn) submitLoginBtn.disabled = true;
     if (loginSpinner) loginSpinner.style.display = 'inline-block';
-    if (loginBtnText) loginBtnText.textContent = 'Đang xử lý...';
+    if (loginBtnText) loginBtnText.textContent = 'Đang đăng nhập...';
 
     try {
-      // Giả lập xác thực đăng nhập thành công
-      apiService.setCurrentUser({
-        id: 'user-sang-01',
-        username: username,
-        displayName: 'Nguyễn Tấn Sang',
-        elo: 1000,
-        avatar: '桑',
-        isLoggedIn: true
-      });
+      let res;
+      if (authService) {
+        res = await authService.login({ username, password });
+      } else {
+        res = {
+          success: true,
+          user: {
+            id: 'user-' + Date.now(),
+            username,
+            displayName: username,
+            elo: 1000,
+            avatar: username.charAt(0).toUpperCase()
+          }
+        };
+      }
 
+      if (!res.success) {
+        if (loginGeneralError) {
+          loginGeneralError.textContent = res.error || 'Tên đăng nhập hoặc mật khẩu không chính xác.';
+          loginGeneralError.style.display = 'block';
+        }
+        return;
+      }
+
+      apiService.setCurrentUser(res.user);
       updateUserAuthUi();
       closeLoginModal();
 
-      // COT-603 AC 2: Sau khi đăng nhập thành công, kiểm tra thông tin phòng đã lưu trong phiên
+      // COT-603 AC 2: Sau khi đăng nhập, kiểm tra chuyển hướng vào phòng đang chờ
       const redirectResult = await apiService.handlePostLoginRoomRedirect();
-
       if (redirectResult.hasPending) {
         if (redirectResult.success && redirectResult.room) {
-          // Phòng còn hợp lệ: Đưa người dùng vào phòng chơi
           openRoomModal(redirectResult.room, redirectResult.role, redirectResult.roleMessage);
           showToast(redirectResult.roleMessage || 'Đã vào phòng từ liên kết mời thành công!', 'success');
         } else {
-          // AC 3: Phòng đã đóng hoặc không khả dụng -> Hiển thị "Room không còn khả dụng"
           showToast(redirectResult.error || 'Room không còn khả dụng.', 'error');
         }
       } else {
         showToast('Đăng nhập thành công!', 'success');
       }
     } catch (err) {
-      showToast(err.message || 'Đăng nhập thất bại.', 'error');
+      if (loginGeneralError) {
+        loginGeneralError.textContent = err.message || 'Tên đăng nhập hoặc mật khẩu không chính xác.';
+        loginGeneralError.style.display = 'block';
+      }
     } finally {
       if (submitLoginBtn) submitLoginBtn.disabled = false;
       if (loginSpinner) loginSpinner.style.display = 'none';
-      if (loginBtnText) loginBtnText.textContent = 'Đang Nhập & Vào Phòng';
+      if (loginBtnText) loginBtnText.textContent = 'Đang Nhập';
+    }
+  }
+
+  /**
+   * COT-580: Xử lý Đăng nhập nhanh Google / Facebook OAuth2
+   */
+  async function handleOAuthLogin(provider) {
+    if (oauthGeneralError) {
+      oauthGeneralError.textContent = '';
+      oauthGeneralError.style.display = 'none';
+    }
+
+    try {
+      const mockOAuthToken = `${provider}_oauth_token_${Date.now()}`;
+      let res;
+      if (authService) {
+        res = await authService.loginWithOAuth(provider, { credential: mockOAuthToken, accessToken: mockOAuthToken });
+      } else {
+        res = {
+          success: true,
+          user: {
+            id: `oauth-${provider}`,
+            username: `${provider}_user`,
+            displayName: provider === 'google' ? 'Kỳ Thủ Google' : 'Kỳ Thủ Facebook',
+            elo: 1000,
+            avatar: provider === 'google' ? 'G' : 'F'
+          }
+        };
+      }
+
+      if (!res.success) {
+        if (oauthGeneralError) {
+          oauthGeneralError.textContent = res.error;
+          oauthGeneralError.style.display = 'block';
+        }
+        return;
+      }
+
+      apiService.setCurrentUser(res.user);
+      updateUserAuthUi();
+      closeLoginModal();
+      showToast(res.message || `Đăng nhập qua ${provider} thành công!`, 'success');
+
+      // Chuyển hướng phòng đang chờ nếu có
+      const redirectResult = await apiService.handlePostLoginRoomRedirect();
+      if (redirectResult.hasPending && redirectResult.success && redirectResult.room) {
+        openRoomModal(redirectResult.room, redirectResult.role, redirectResult.roleMessage);
+      }
+    } catch (err) {
+      if (oauthGeneralError) {
+        oauthGeneralError.textContent = err.message || 'Lỗi kết nối OAuth.';
+        oauthGeneralError.style.display = 'block';
+      }
+    }
+  }
+
+  /**
+   * COT-579: Quản lý Modal & Logic Đăng ký tài khoản
+   */
+  function openRegisterModal() {
+    if (!registerModal) return;
+    clearRegisterErrors();
+    if (registerSuccessBanner) registerSuccessBanner.style.display = 'none';
+    if (registerInputsArea) registerInputsArea.style.display = 'block';
+    if (submitRegisterBtn) submitRegisterBtn.style.display = 'inline-block';
+    registerModal.style.display = 'flex';
+    registerUsernameInput?.focus();
+  }
+
+  function closeRegisterModal() {
+    if (registerModal) registerModal.style.display = 'none';
+    clearRegisterErrors();
+  }
+
+  function clearRegisterErrors() {
+    [registerUsernameError, registerDisplayNameError, registerEmailError, registerPasswordError, registerConfirmPasswordError].forEach(el => {
+      if (el) {
+        el.textContent = '';
+        el.style.display = 'none';
+      }
+    });
+    [registerUsernameInput, registerDisplayNameInput, registerEmailInput, registerPasswordInput, registerConfirmPasswordInput].forEach(inp => {
+      inp?.classList.remove('input-error');
+    });
+  }
+
+  function updateRegisterChecklist() {
+    const pass = registerPasswordInput ? registerPasswordInput.value : '';
+    const confirm = registerConfirmPasswordInput ? registerConfirmPasswordInput.value : '';
+
+    const isLengthOk = pass.length >= 8;
+    const isAlphaNumOk = /[A-Za-z]/.test(pass) && /\d/.test(pass);
+    const isMatchOk = Boolean(pass && pass === confirm);
+
+    if (regChkLength) {
+      regChkLength.classList.toggle('is-valid', isLengthOk);
+      regChkLength.querySelector('.chk-icon').textContent = isLengthOk ? '●' : '○';
+    }
+    if (regChkAlphaNum) {
+      regChkAlphaNum.classList.toggle('is-valid', isAlphaNumOk);
+      regChkAlphaNum.querySelector('.chk-icon').textContent = isAlphaNumOk ? '●' : '○';
+    }
+    if (regChkMatch) {
+      regChkMatch.classList.toggle('is-valid', isMatchOk);
+      regChkMatch.querySelector('.chk-icon').textContent = isMatchOk ? '●' : '○';
+    }
+  }
+
+  async function handleRegisterSubmit(e) {
+    e.preventDefault();
+    clearRegisterErrors();
+
+    const username = registerUsernameInput ? registerUsernameInput.value : '';
+    const displayName = registerDisplayNameInput ? registerDisplayNameInput.value : '';
+    const email = registerEmailInput ? registerEmailInput.value : '';
+    const password = registerPasswordInput ? registerPasswordInput.value : '';
+    const confirmPassword = registerConfirmPasswordInput ? registerConfirmPasswordInput.value : '';
+
+    // AC 2: Validate client-side
+    const validation = typeof window.validateRegisterForm === 'function'
+      ? window.validateRegisterForm({ username, displayName, email, password, confirmPassword })
+      : { isValid: false, errors: {} };
+
+    if (!validation.isValid) {
+      if (validation.errors.username && registerUsernameError) {
+        registerUsernameError.textContent = validation.errors.username.error;
+        registerUsernameError.style.display = 'block';
+        registerUsernameInput?.classList.add('input-error');
+      }
+      if (validation.errors.displayName && registerDisplayNameError) {
+        registerDisplayNameError.textContent = validation.errors.displayName.error;
+        registerDisplayNameError.style.display = 'block';
+        registerDisplayNameInput?.classList.add('input-error');
+      }
+      if (validation.errors.email && registerEmailError) {
+        registerEmailError.textContent = validation.errors.email.error;
+        registerEmailError.style.display = 'block';
+        registerEmailInput?.classList.add('input-error');
+      }
+      if (validation.errors.password && registerPasswordError) {
+        registerPasswordError.textContent = validation.errors.password.error;
+        registerPasswordError.style.display = 'block';
+        registerPasswordInput?.classList.add('input-error');
+      }
+      if (validation.errors.confirmPassword && registerConfirmPasswordError) {
+        registerConfirmPasswordError.textContent = validation.errors.confirmPassword.error;
+        registerConfirmPasswordError.style.display = 'block';
+        registerConfirmPasswordInput?.classList.add('input-error');
+      }
+      return;
+    }
+
+    // AC 3: Khóa nút tránh double submit
+    if (submitRegisterBtn) submitRegisterBtn.disabled = true;
+    if (registerSpinner) registerSpinner.style.display = 'inline-block';
+    if (registerBtnText) registerBtnText.textContent = 'Đang đăng ký...';
+
+    try {
+      let res;
+      if (authService) {
+        res = await authService.register({ username, displayName, email, password, confirmPassword });
+      } else {
+        res = { success: true, message: 'Đăng ký tài khoản thành công! Vui lòng đăng nhập.' };
+      }
+
+      if (!res.success) {
+        showToast(res.error || 'Đăng ký thất bại.', 'error');
+        return;
+      }
+
+      // AC 4: Thông báo thành công và chuyển sang màn hình Đăng nhập (không tự đăng nhập)
+      if (registerSuccessBanner) {
+        if (registerSuccessMsg) registerSuccessMsg.textContent = res.message;
+        registerSuccessBanner.style.display = 'flex';
+      }
+      if (registerInputsArea) registerInputsArea.style.display = 'none';
+      if (submitRegisterBtn) submitRegisterBtn.style.display = 'none';
+
+      showToast('Đăng ký thành công! Hãy đăng nhập với tài khoản mới.', 'success');
+
+      setTimeout(() => {
+        closeRegisterModal();
+        openLoginModal();
+      }, 1500);
+    } catch (err) {
+      showToast(err.message || 'Lỗi khi đăng ký tài khoản.', 'error');
+    } finally {
+      if (submitRegisterBtn) submitRegisterBtn.disabled = false;
+      if (registerSpinner) registerSpinner.style.display = 'none';
+      if (registerBtnText) registerBtnText.textContent = 'Đăng Ký Tài Khoản';
+    }
+  }
+
+  /**
+   * COT-585: Quản lý Modal & Logic Cập nhật Hồ sơ cá nhân & Avatar
+   */
+  function openProfileModal() {
+    if (!profileModal) return;
+    const user = apiService.getCurrentUser();
+    if (!user) {
+      openLoginModal();
+      return;
+    }
+
+    if (profileUsernameInput) profileUsernameInput.value = user.username || '';
+    if (profileEmailInput) profileEmailInput.value = user.email || `${user.username || 'user'}@cotuong69.vn`;
+    if (profileDisplayNameInput) profileDisplayNameInput.value = user.displayName || user.username || '';
+    if (profileEloDisplay) profileEloDisplay.textContent = `${user.elo || 1000} Elo`;
+
+    selectedAvatarFile = null;
+    selectedAvatarPreviewUrl = null;
+
+    if (profileAvatarError) {
+      profileAvatarError.textContent = '';
+      profileAvatarError.style.display = 'none';
+    }
+    if (profileDisplayNameError) {
+      profileDisplayNameError.textContent = '';
+      profileDisplayNameError.style.display = 'none';
+    }
+    if (profileSuccessBanner) profileSuccessBanner.style.display = 'none';
+
+    // Hiển thị Avatar hiện tại
+    if (user.avatarUrl && (user.avatarUrl.startsWith('data:') || user.avatarUrl.startsWith('http') || user.avatarUrl.startsWith('/'))) {
+      if (profileAvatarImg) {
+        profileAvatarImg.src = user.avatarUrl;
+        profileAvatarImg.style.display = 'block';
+      }
+      if (profileAvatarFallback) profileAvatarFallback.style.display = 'none';
+    } else {
+      if (profileAvatarImg) profileAvatarImg.style.display = 'none';
+      if (profileAvatarFallback) {
+        profileAvatarFallback.textContent = user.avatar || (user.displayName ? user.displayName.charAt(0).toUpperCase() : '棋');
+        profileAvatarFallback.style.display = 'block';
+      }
+    }
+
+    profileModal.style.display = 'flex';
+  }
+
+  function closeProfileModal() {
+    if (profileModal) profileModal.style.display = 'none';
+  }
+
+  function handleAvatarFileSelect(e) {
+    const file = e.target.files && e.target.files[0];
+    if (!file) return;
+
+    if (profileAvatarError) {
+      profileAvatarError.textContent = '';
+      profileAvatarError.style.display = 'none';
+    }
+
+    // AC 2: Kiểm tra dung lượng <= 2MB trên client
+    const validation = typeof window.validateAvatarFile === 'function'
+      ? window.validateAvatarFile(file)
+      : { isValid: file.size <= 2 * 1024 * 1024, error: 'Dung lượng ảnh vượt quá 2MB' };
+
+    if (!validation.isValid) {
+      if (profileAvatarError) {
+        profileAvatarError.textContent = validation.error;
+        profileAvatarError.style.display = 'block';
+      }
+      e.target.value = '';
+      return;
+    }
+
+    selectedAvatarFile = file;
+
+    // Xem trước ảnh (Preview) trước khi lưu
+    const reader = new FileReader();
+    reader.onload = (readEvent) => {
+      selectedAvatarPreviewUrl = readEvent.target.result;
+      if (profileAvatarImg) {
+        profileAvatarImg.src = selectedAvatarPreviewUrl;
+        profileAvatarImg.style.display = 'block';
+      }
+      if (profileAvatarFallback) profileAvatarFallback.style.display = 'none';
+    };
+    reader.readAsDataURL(file);
+  }
+
+  async function handleProfileSubmit(e) {
+    e.preventDefault();
+    if (profileDisplayNameError) {
+      profileDisplayNameError.textContent = '';
+      profileDisplayNameError.style.display = 'none';
+    }
+    if (profileAvatarError) {
+      profileAvatarError.textContent = '';
+      profileAvatarError.style.display = 'none';
+    }
+
+    const newDisplayName = profileDisplayNameInput ? profileDisplayNameInput.value.trim() : '';
+
+    // AC 1: Validate tên hiển thị
+    const nameCheck = typeof window.validateDisplayName === 'function'
+      ? window.validateDisplayName(newDisplayName)
+      : { isValid: Boolean(newDisplayName && newDisplayName.length >= 2) };
+
+    if (!nameCheck.isValid) {
+      if (profileDisplayNameError) {
+        profileDisplayNameError.textContent = nameCheck.error || 'Tên hiển thị không hợp lệ.';
+        profileDisplayNameError.style.display = 'block';
+      }
+      profileDisplayNameInput?.focus();
+      return;
+    }
+
+    if (submitProfileBtn) submitProfileBtn.disabled = true;
+    if (profileSpinner) profileSpinner.style.display = 'inline-block';
+    if (profileBtnText) profileBtnText.textContent = 'Đang lưu...';
+
+    try {
+      const currentUser = apiService.getCurrentUser() || {};
+      let updatedUser = { ...currentUser, displayName: newDisplayName };
+
+      if (userProfileService) {
+        const nameRes = await userProfileService.updateDisplayName(newDisplayName);
+        if (!nameRes.success) {
+          showToast(nameRes.error, 'error');
+          return;
+        }
+        updatedUser = nameRes.user;
+
+        if (selectedAvatarFile) {
+          const avatarRes = await userProfileService.updateAvatar(selectedAvatarFile, selectedAvatarPreviewUrl);
+          if (avatarRes.success) {
+            updatedUser = avatarRes.user;
+          }
+        }
+      } else {
+        if (selectedAvatarPreviewUrl) {
+          updatedUser.avatar = selectedAvatarPreviewUrl;
+          updatedUser.avatarUrl = selectedAvatarPreviewUrl;
+        }
+      }
+
+      // AC 3: Đồng bộ ngay lập tức lên Header
+      apiService.setCurrentUser(updatedUser);
+      updateUserAuthUi();
+
+      if (profileSuccessBanner) profileSuccessBanner.style.display = 'flex';
+      showToast('Cập nhật hồ sơ cá nhân và ảnh đại diện thành công!', 'success');
+
+      setTimeout(() => {
+        closeProfileModal();
+      }, 1200);
+    } catch (err) {
+      showToast(err.message || 'Lỗi khi cập nhật hồ sơ.', 'error');
+    } finally {
+      if (submitProfileBtn) submitProfileBtn.disabled = false;
+      if (profileSpinner) profileSpinner.style.display = 'none';
+      if (profileBtnText) profileBtnText.textContent = 'Lưu Thay Đổi';
     }
   }
 
